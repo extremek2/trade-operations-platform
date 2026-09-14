@@ -144,7 +144,7 @@ class IdentityAccessIntegrationTest extends PostgresTestSupport {
     }
 
     @Test void baselineCreatesSessionsAndRejectsInvalidContext() {
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version IN ('1','2') AND success", Integer.class)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version IN ('1','2','3') AND success", Integer.class)).isEqualTo(3);
         var tokens = owner();
         assertThatThrownBy(() -> jdbc.update("UPDATE refresh_session SET session_kind='PLATFORM' WHERE user_id=(SELECT id FROM app_user WHERE public_id=?)", tokens.response().user().userId()));
     }

@@ -47,7 +47,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/organizations").denyAll()
                         .requestMatchers("/api/v1/system-admin/**").hasRole("SYSTEM_ADMIN")
                         .requestMatchers("/api/v1/case-workspace/**").hasAnyRole("CASE_VIEWER", "CASE_CONTRIBUTOR")
-                        .requestMatchers("/api/v1/shipments/**", "/api/v1/organizations/**", "/api/v1/products/**", "/api/v1/quotes/**").hasAnyRole("OWNER", "ADMIN", "OPERATOR", "VIEWER")
+                        .requestMatchers("/api/v1/shipments/**", "/api/v1/organizations/**", "/api/v1/products/**",
+                                "/api/v1/quotes/**", "/api/v1/cost-scenarios/**")
+                        .hasAnyRole("OWNER", "ADMIN", "OPERATOR", "VIEWER")
                         .requestMatchers(
                                 "/api/v1/auth/signup",
                                 "/api/v1/auth/login",

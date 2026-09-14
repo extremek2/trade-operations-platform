@@ -7,6 +7,7 @@ const navigation = [
   { path: "/shipments/new", label: "화물 등록" },
   { path: "/products", label: "상품 후보" },
   { path: "/sourcing", label: "공급 견적" },
+  { path: "/costing", label: "예상 원가" },
 ];
 
 export default function AppLayout({ path, navigate, children }) {

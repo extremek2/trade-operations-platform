@@ -41,3 +41,13 @@ test('공급 견적 화면은 상품과 거래처와 견적 원장을 함께 조
   expect(global.fetch.mock.calls.some(([url]) => String(url).endsWith('/quotes'))).toBe(true);
   expect(global.fetch.mock.calls.some(([url]) => String(url).endsWith('/organizations/current/partners'))).toBe(true);
 });
+
+test('예상 원가 화면은 견적과 계산 스냅샷을 함께 조회한다', async () => {
+  window.history.replaceState({}, '', '/costing');
+  jest.spyOn(global, 'fetch').mockImplementation(async url => ({ ok: true, json: async () => ({ success: true,
+    data: String(url).includes('/auth/refresh') ? { accessToken: 'token', user: { sessionKind: 'ORGANIZATION', organizationName: '운영 화주', email: 'owner@example.test', role: 'OWNER' } } : [] }) }));
+  render(<App/>);
+  expect(await screen.findByRole('heading', { level: 1, name: '예상 원가' })).toBeInTheDocument();
+  expect(global.fetch.mock.calls.some(([url]) => String(url).endsWith('/quotes'))).toBe(true);
+  expect(global.fetch.mock.calls.some(([url]) => String(url).endsWith('/cost-scenarios'))).toBe(true);
+});

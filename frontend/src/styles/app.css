@@ -147,3 +147,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .quote-list { padding:12px; }
   .quote-editor { padding:16px; }
 }
+.costing-form-panel { margin-bottom:18px; }
+.cost-source-summary { display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; padding:14px 16px; border-radius:8px; background:#eaf5f3; }
+.cost-source-summary span,.cost-source-summary small { color:var(--muted); font-size:12px; }
+.cost-fieldset { min-width:0; margin:0; padding:18px 18px 2px; border:1px solid var(--line); border-radius:9px; }
+.cost-fieldset legend { padding:0 7px; color:var(--teal); font-size:12px; font-weight:700; }
+.cost-ledger tbody tr { cursor:default; }
+.cost-ledger .badge-cost-complete,.cost-ledger .badge-complete { background:#e3f3ec; color:var(--green); }
+.cost-ledger .badge-incomplete { background:#fff3d9; color:#946312; }
+@media(max-width:600px) {
+  .cost-source-summary { grid-template-columns:1fr; }
+}
