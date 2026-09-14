@@ -4,7 +4,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7"
 }
 
-group = "com.productresearch"
+group = "com.tradeoperationsplatform"
 version = "0.0.1-SNAPSHOT"
 description = "api-server"
 
@@ -55,6 +55,6 @@ tasks.withType<Test> {
 tasks.register<JavaExec>("onboardingE2eServer") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets["test"].runtimeClasspath
-    mainClass.set("com.productresearch.apiserver.OnboardingE2eServer")
+    mainClass.set("com.tradeoperationsplatform.apiserver.OnboardingE2eServer")
     systemProperty("api.version", providers.environmentVariable("DOCKER_API_VERSION").getOrElse("1.40"))
 }

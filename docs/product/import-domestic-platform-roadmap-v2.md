@@ -53,7 +53,7 @@
 | 통관·업무·파일 | V04~V08 이벤트·task·issue·attachment·rule 스키마 | 필요한 API·화면·권한·처리 흐름. 스키마만으로 사용 가능 아님 |
 | 입고·판매 결과 | 새 계획서의 제안 | 실제 입고·수량·원가·판매 실험 연결 기능 |
 
-주요 근거: `docs/engineering/identity-stage-5.md`, `api-server/src/main/java/com/productresearch/apiserver/domain/`, `api-server/src/main/resources/db/migration/`, `frontend/src/pages/`, `ops/`.
+주요 근거: `docs/engineering/identity-stage-5.md`, `api-server/src/main/java/com/tradeoperationsplatform/apiserver/domain/`, `api-server/src/main/resources/db/migration/`, `frontend/src/pages/`, `ops/`.
 
 ## 3. 파트별 책임과 인계
 
