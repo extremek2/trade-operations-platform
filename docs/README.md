@@ -50,7 +50,7 @@
 |---|---|
 | [ADR-0001: Core와 Automation 소유권 분리](architecture/ADR-0001-p0-service-and-data-ownership.md) | 승인, 공동 DB 경로 제거 완료 |
 | [ADR-0002: 코어 도메인과 빈 DB 기준선](architecture/ADR-0002-core-domain-and-clean-baseline.md) | 승인, 개발 기준선 적용 완료 |
-| [코어 도메인 실행 계획](architecture/P0_EXECUTION_PLAN.md) | P0 완료, P1 상품·견적 수직 흐름 진행 중 |
+| [코어 도메인 실행 계획](architecture/P0_EXECUTION_PLAN.md) | P0~P5 첫 수직 사이클 완료, P6 공급 제안 수집·승인 구현 대기 |
 
 ## 구현·검증 기록
 
