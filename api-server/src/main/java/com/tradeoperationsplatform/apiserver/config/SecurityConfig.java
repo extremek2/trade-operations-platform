@@ -48,7 +48,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/system-admin/**").hasRole("SYSTEM_ADMIN")
                         .requestMatchers("/api/v1/case-workspace/**").hasAnyRole("CASE_VIEWER", "CASE_CONTRIBUTOR")
                         .requestMatchers("/api/v1/shipments/**", "/api/v1/organizations/**", "/api/v1/products/**",
-                                "/api/v1/quotes/**", "/api/v1/cost-scenarios/**")
+                                "/api/v1/quotes/**", "/api/v1/cost-scenarios/**", "/api/v1/trade-cycles/**")
                         .hasAnyRole("OWNER", "ADMIN", "OPERATOR", "VIEWER")
                         .requestMatchers(
                                 "/api/v1/auth/signup",

@@ -35,7 +35,7 @@ class DeploymentRehearsalTest {
                 assertThatThrownBy(() -> sql.execute("DELETE FROM identity_audit_event")).isInstanceOf(SQLException.class);
                 assertThatThrownBy(() -> sql.execute("UPDATE flyway_schema_history SET success=false")).isInstanceOf(SQLException.class);
             }
-            assertThat(query(database,database.getJdbcUrl(),"SELECT max(installed_rank) FROM flyway_schema_history")).isEqualTo("3");
+            assertThat(query(database,database.getJdbcUrl(),"SELECT max(installed_rank) FROM flyway_schema_history")).isEqualTo("6");
             assertThat(query(database,candidate,"SELECT count(*) FROM organization_member WHERE member_role='OWNER'")).isEqualTo("1");
             exec(database,"psql","-U",database.getUsername(),"-d","candidate","-v","ON_ERROR_STOP=1","-c","""
                 INSERT INTO business_partner(owner_organization_id,name) VALUES(1,'fixture partner');

@@ -2,6 +2,7 @@ package com.tradeoperationsplatform.apiserver.domain.costing.dto;
 
 import com.tradeoperationsplatform.apiserver.domain.costing.CostCalculation;
 import com.tradeoperationsplatform.apiserver.domain.costing.entity.CostScenario;
+import com.tradeoperationsplatform.apiserver.domain.sourcing.entity.SupplierQuote;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -9,7 +10,7 @@ import java.util.UUID;
 
 public record CostScenarioResponse(
         UUID scenarioId, UUID previousScenarioId, int revisionNumber, String scenarioName,
-        UUID quoteId, String quoteNumber, int quoteRevisionNumber, String supplierName,
+        UUID quoteId, String quoteNumber, int quoteRevisionNumber, SupplierQuote.Status quoteStatus, String supplierName,
         UUID productId, String productName, String quoteCurrency,
         BigDecimal quotedUnitPrice, CostScenario.InputSource quotedUnitPriceSource,
         BigDecimal orderQuantity, BigDecimal excludedQuantity, BigDecimal sellableQuantity,
@@ -32,7 +33,7 @@ public record CostScenarioResponse(
         return new CostScenarioResponse(
                 scenario.getPublicId(), scenario.getPreviousScenario() == null ? null : scenario.getPreviousScenario().getPublicId(),
                 scenario.getRevisionNumber(), scenario.getScenarioName(), scenario.getQuote().getPublicId(),
-                scenario.getQuote().getQuoteNumber(), scenario.getQuoteRevisionNumber(), scenario.getQuote().getSupplier().getName(),
+                scenario.getQuote().getQuoteNumber(), scenario.getQuoteRevisionNumber(), scenario.getQuote().getStatus(), scenario.getQuote().getSupplier().getName(),
                 scenario.getProduct().getPublicId(), scenario.getProduct().getName(), scenario.getQuoteCurrency(),
                 scenario.getQuotedUnitPrice(), scenario.getQuotedUnitPriceSource(), scenario.getOrderQuantity(),
                 scenario.getExcludedQuantity(), scenario.getSellableQuantity(), scenario.getExchangeRate(),
