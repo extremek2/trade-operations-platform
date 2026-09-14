@@ -114,3 +114,36 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .partner-confirm p { overflow-wrap: anywhere; }
 .sourcing-forms { align-items:start; }
 .quote-table tbody tr { cursor:default; }
+.quote-lines-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:4px; }
+.quote-line-editor { min-width:0; margin:0; padding:18px; border:1px solid var(--line); border-radius:9px; }
+.quote-line-editor legend { padding:0 7px; color:var(--teal); font-size:12px; font-weight:700; }
+.quote-line-editor > label { margin-bottom:16px; }
+.line-remove { display:block; margin-left:auto; padding:7px 10px; }
+.quote-list { display:grid; gap:18px; padding:20px; }
+.quote-entry { overflow:hidden; border:1px solid var(--line); border-radius:10px; background:white; }
+.quote-entry-header { display:grid; grid-template-columns:minmax(170px,.8fr) minmax(420px,1.6fr) minmax(210px,1fr); gap:22px; align-items:center; padding:20px; }
+.quote-title-row { display:flex; align-items:center; gap:10px; margin-bottom:7px; }
+.quote-title-row h3 { margin:0; font-size:16px; }
+.quote-meta { display:grid; grid-template-columns:repeat(4,minmax(80px,1fr)); gap:16px; margin:0; }
+.quote-meta div { min-width:0; }
+.quote-meta dt { margin-bottom:5px; color:var(--muted); font-size:11px; }
+.quote-meta dd { margin:0; overflow-wrap:anywhere; font-size:13px; font-weight:600; }
+.quote-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:7px; }
+.quote-actions .button { padding:8px 11px; white-space:nowrap; }
+.quote-notes { margin:0; padding:0 20px 18px; color:var(--muted); font-size:13px; white-space:pre-wrap; }
+.quote-editor { display:flex; flex-direction:column; gap:17px; padding:22px; border-top:1px solid var(--line); background:#f8faf9; }
+.quote-editor-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+.quote-editor-heading h4 { margin:0 0 5px; }
+.quote-editor-heading p { margin:0; }
+.quote-ledger .quote-table { border-top:1px solid var(--line); }
+@media(max-width:1180px) {
+  .quote-entry-header { grid-template-columns:1fr 2fr; }
+  .quote-actions { grid-column:1 / -1; justify-content:flex-start; }
+}
+@media(max-width:760px) {
+  .quote-entry-header { grid-template-columns:1fr; }
+  .quote-meta { grid-template-columns:repeat(2,1fr); }
+  .quote-actions { grid-column:auto; }
+  .quote-list { padding:12px; }
+  .quote-editor { padding:16px; }
+}
