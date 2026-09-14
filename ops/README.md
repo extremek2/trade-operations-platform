@@ -1,6 +1,6 @@
 # 운영 실행서
 
-이 문서는 V1/V2 빈 DB 기준선과 V3 순방향 원가 시나리오 migration의 운영 절차다. 실제 운영 DB·관리자 생성·메일 발송·서비스
+이 문서는 V1/V2 빈 DB 기준선과 V3~V6 순방향 업무 migration의 운영 절차다. 실제 운영 DB·관리자 생성·메일 발송·서비스
 공개는 대상과 결과를 확인한 뒤 별도 승인받아 실행한다.
 
 ## 1. 현재 배포 범위
@@ -8,6 +8,10 @@
 - React Web, Spring Boot API, PostgreSQL 15
 - Flyway V1: 인증·조직·온보딩·화물·외부 협업
 - Flyway V2: Product·BusinessPartner·SupplierQuote
+- Flyway V3: 예상 원가 시나리오
+- Flyway V4: 매입 발주와 발주 품목
+- Flyway V5: 선적 배정·부분 입고·재고 로트
+- Flyway V6: 실제 원가 배부·판매 관측·재발주 판단
 - Research Python, AI Worker, Celery, Redis는 포함하지 않는다.
 - 기존 V01~V18 DB를 V1/V2로 직접 올리는 migration 경로는 제공하지 않는다.
 
