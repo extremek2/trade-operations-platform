@@ -24,11 +24,6 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
 
-  data:
-    redis:
-      host: ${SPRING_REDIS_HOST:localhost}
-      port: ${SPRING_REDIS_PORT:6379}
-
   security:
     enabled: true
 

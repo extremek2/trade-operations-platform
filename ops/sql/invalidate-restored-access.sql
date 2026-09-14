@@ -1,5 +1,5 @@
 \set ON_ERROR_STOP on
--- Run ONLY on the restored V17 database, with traffic and mail still stopped.
+-- Run ONLY on a restored application database, with traffic and mail still stopped.
 -- Prevent backup copies of sessions and links from authenticating or sending again.
 BEGIN;
 UPDATE refresh_session SET revoked_at=NOW() WHERE revoked_at IS NULL;

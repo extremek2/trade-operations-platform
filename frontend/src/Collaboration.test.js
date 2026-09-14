@@ -5,7 +5,7 @@ import { applySession } from './api/client';
 const external = { userId: 'external', name: '외부 담당자', email: 'external@example.test', sessionKind: 'CASE', shipmentId: 'case-1', participantId: 'p-1', caseAccessLevel: 'VIEWER' };
 const ok = data => ({ ok: true, status: 200, json: async () => ({ success: true, data }) });
 const fail = (status, message) => ({ ok: false, status, json: async () => ({ success: false, message }) });
-const partner = { casePartnerId: 'partner-1', companyId: 'company-1', name: '테스트 포워더', type: 'FORWARDER', occupied: 0, participants: [] };
+const partner = { casePartnerId: 'partner-1', businessPartnerId: 'business-partner-1', name: '테스트 포워더', role: 'FORWARDER', occupied: 0, participants: [] };
 const workspace = { caseNumber: 'CASE-001', documents: [], accessLevel: 'VIEWER', transportMode: 'SEA' };
 function mock(user = external, custom = () => undefined) {
   return jest.spyOn(global, 'fetch').mockImplementation(async (url, options = {}) => {

@@ -19,7 +19,7 @@
 - **해결:** 상품 후보와 수입 건을 연결하고 예상비용과 실제비용을 같은 항목으로 마감한 뒤 판매·재고 결과를 다음 발주 판단으로 되돌린다.
 - **대상:** 일본 비전기 생활·수납·문구·취미용품을 국내 온라인 마켓에서 시험 판매하려는 한국 1인 사업자.
 - **핵심 차별점:** 상품 추천이나 단순 원가계산이 아니라 `예상원가 → 실제원가 → 실현마진 → 재발주`의 닫힌 데이터 루프를 만든다.
-- **형태:** Docker Compose 기반 웹앱. V0는 창업자 단일 Workspace지만 전 엔터티에 `workspace_id`를 둔다.
+- **형태:** Docker Compose 기반 웹앱. V0부터 인증된 `Organization`을 업무 소유 경계로 사용한다.
 
 ## IR Deck 전환 준비
 
@@ -38,7 +38,7 @@ BM 확정 전 증거 수집과 가격 실험 순서는 [BM Stage 1 — Market to
 | F-001 | 창업자는 T/T 송금, 회계처리, 통관·입고, 포워더·관세사 협업과 납품 업무 경험이 있다. | 사용자 제공 사실 | 팀·Founder-Market Fit의 근거. 기간·건수는 미확인 |
 | F-002 | V0 첫 회랑은 일본에서 한국으로 들어오는 소량 수입이다. | 제품 결정 | 전체 시장규모 주장에 사용하지 않음 |
 | F-003 | 첫 사용자는 창업자 본인이며 실제 3-SKU로 검증한다. | 검증 계획 | 트랙션으로 표현 금지 |
-| F-004 | 제품은 단일 사용자에서 시작하지만 모든 핵심 데이터에 Workspace 경계를 둔다. | 설계 결정 | 현재 다중 사용자 기능이 있다고 표현 금지 |
+| F-004 | 제품은 단일 사용자에서 시작하지만 모든 핵심 데이터에 Organization 경계를 둔다. | 설계 결정 | 현재 조직·직원·건별 외부 권한은 구현됨 |
 | F-005 | 엔화 약세는 초기 테스트 비용을 낮출 수 있다. | 외부환경 가설 | 특정 환율·지속기간 확인 전 영구 성장동력으로 표현 금지 |
 | F-006 | 향후 소형 수입사업자 SaaS와 검증 SKU 공동사입으로 확장한다. | 로드맵 가설 | 고객수요 확인 전 매출원으로 산입 금지 |
 | F-007 | 해외에는 MOQBuy·MOQ Pools·Collective Power 등 공동발주 서비스가 있다. | 공식 사이트 확인 | 세계 최초 주장 금지 |
@@ -113,8 +113,8 @@ BM 확정 전 증거 수집과 가격 실험 순서는 [BM Stage 1 — Market to
 
 ### V0에서 제외
 
-- 회원가입·결제·구독·조직 관리
-- 포워더·관세사 외부 계정 및 토큰
+- 결제·구독
+- 범용 포워더·관세사 계정(건별 이메일 참여 권한만 제공)
 - 쇼핑몰 주문·재고 실시간 연동
 - 세관 신고와 해외송금 실행
 - 자동 HS·인증·법률 판정
@@ -473,11 +473,11 @@ flowchart LR
 
 | 엔터티 | 주요 책임 |
 |---|---|
-| Workspace | V0 단일 작업공간, 향후 테넌트 경계 |
-| ProductCandidate | 상품 후보와 상태 |
-| SKU | 규격·옵션 단위 상품 |
-| Supplier | 공급처와 거래 이력 |
-| Quote / QuoteLine | 공급조건·수량구간·원본 |
+| Organization | 현재 조직이자 테넌트 경계 |
+| Product | 후보 발굴부터 판매·중단까지의 단일 상품 원장 |
+| ProductVariant | 실제 옵션별 SKU·재고가 필요할 때 추가하는 하위 모델 |
+| BusinessPartner | 공급처·포워더·관세사 등 다중 역할 거래처 |
+| SupplierQuote / SupplierQuoteLine | 공급조건·수량·단가 스냅샷 |
 | CostScenario | 수량·환율별 예상원가 스냅샷 |
 | ImportCase | 발주부터 원가마감까지의 건 |
 | ImportCaseLine | 수입 건과 SKU의 수량·금액 연결 |
@@ -488,19 +488,20 @@ flowchart LR
 | Decision | 진행·탈락·재발주 판단과 이유 |
 | AuditEvent | 중요 변경 이력 |
 
-모든 핵심 엔터티에 `workspace_id`를 저장한다. V0의 로그인 화면과 조직 관리 기능은 생략하되, 개발 환경의 기본 Workspace를 시드한다.
+조직 소유 Aggregate는 `organization_id`를 저장하고 인증 컨텍스트에서 범위를 결정한다. 요청 Body의
+조직 ID는 신뢰하지 않는다. 로그인, 조직 개설 승인, 직원 권한은 이미 기반 기능으로 구현되어 있다.
 
 ### ERD
 
 ```mermaid
 erDiagram
-  WORKSPACE ||--o{ PRODUCT_CANDIDATE : "소유"
-  WORKSPACE ||--o{ SUPPLIER : "소유"
-  PRODUCT_CANDIDATE ||--o{ SKU : "구성"
-  SUPPLIER ||--o{ QUOTE : "제출"
-  QUOTE ||--o{ QUOTE_LINE : "포함"
-  SKU ||--o{ QUOTE_LINE : "견적"
-  SKU ||--o{ COST_SCENARIO : "계산"
+  ORGANIZATION ||--o{ PRODUCT : "소유"
+  ORGANIZATION ||--o{ BUSINESS_PARTNER : "소유"
+  PRODUCT ||--o{ PRODUCT_VARIANT : "선택적 구성"
+  BUSINESS_PARTNER ||--o{ SUPPLIER_QUOTE : "공급처 역할로 제출"
+  SUPPLIER_QUOTE ||--o{ SUPPLIER_QUOTE_LINE : "포함"
+  PRODUCT ||--o{ SUPPLIER_QUOTE_LINE : "견적"
+  PRODUCT ||--o{ COST_SCENARIO : "계산"
   IMPORT_CASE ||--o{ IMPORT_CASE_LINE : "포함"
   SKU ||--o{ IMPORT_CASE_LINE : "수입"
   IMPORT_CASE ||--o{ COST_ITEM : "발생"
@@ -515,11 +516,13 @@ erDiagram
   SKILL_VERSION ||--o{ AUTOMATION_RESULT : "생성"
 ```
 
-전 테이블 공통 컬럼은 `id UUID`, `workspace_id UUID`, `created_at`, `updated_at`, `deleted_at`이다. 계산·자동화 산출물은 `schema_version`을 추가한다. `DocumentVersion.storage_key`, 원문 내용, 송금·연락처 필드는 민감정보로 취급한다.
+내부 PK는 BIGINT, 외부 계약 ID는 UUID `public_id`를 사용한다. 조직 소유 Aggregate에는
+`organization_id`, 변경 충돌을 막는 엔터티에는 `version`을 둔다. 삭제 방식은 일괄 soft delete가
+아니라 감사·법적 보존과 참조 무결성에 따라 Aggregate별로 정한다.
 
 ### 엔터티 규모와 보존
 
-| 엔터티군 | V0 1년 가정 | SaaS 100 Workspace 가정 | 보존 |
+| 엔터티군 | V0 1년 가정 | SaaS 100 Organization 가정 | 보존 |
 |---|---:|---:|---|
 | 후보·SKU·공급처·견적 | 각 1천 미만 | 각 10만 미만 | 사용기간 + 삭제 유예 |
 | 수입 건·라인·비용 | 각 1천 미만 | 각 20만 미만 | 세무·계약 정책 확인 후 결정 |
@@ -534,14 +537,14 @@ erDiagram
 
 | 테이블 | 인덱스 | 대상 쿼리 |
 |---|---|---|
-| product_candidate | `(workspace_id, status, updated_at desc)` | 후보 보드 |
-| quote | `(workspace_id, supplier_id, quoted_at desc)` | 공급처 견적 이력 |
-| import_case | `(workspace_id, status, updated_at desc)` | 진행·마감 대기 |
+| product | `(organization_id, status, updated_at desc)` | 후보·상품 보드 |
+| supplier_quote | `(organization_id, business_partner_id, quoted_at desc)` | 공급처 견적 이력 |
+| import_case | `(organization_id, status, updated_at desc)` | 진행·마감 대기 |
 | cost_item | `(import_case_id, cost_type)` | 원가 마감 |
-| document | `(workspace_id, import_case_id, document_type)` | 문서 세트 |
-| sales_observation | `(workspace_id, sku_id, observed_on)` | 판매·재고 시계열 |
-| decision | `(workspace_id, sku_id, created_at desc)` | 재발주 이력 |
-| audit_event | `(workspace_id, entity_type, entity_id, created_at desc)` | 감사 조회 |
+| document | `(organization_id, import_case_id, document_type)` | 문서 세트 |
+| sales_observation | `(organization_id, product_id, observed_on)` | 판매·재고 시계열 |
+| decision | `(organization_id, product_id, created_at desc)` | 재발주 이력 |
+| audit_event | `(organization_id, entity_type, entity_id, created_at desc)` | 감사 조회 |
 
 ## 5.1 시스템 설계 다이어그램
 
@@ -731,8 +734,8 @@ V0도 DB 직접 수정 없이 장애를 처리할 최소 운영 화면을 둔다
 
 ### Sprint 1 — 수직 슬라이스
 
-- Workspace, 상품, SKU, 공급처, 견적 데이터 모델
-- 후보 목록·상세·견적 입력
+- Organization, Product, BusinessPartner, SupplierQuote 데이터 모델
+- 후보 등록·목록과 견적 API
 - 예상원가 계산 라이브러리와 단위 테스트
 - 개발용 시드 데이터 3개
 
@@ -797,7 +800,7 @@ V0도 DB 직접 수정 없이 장애를 처리할 최소 운영 화면을 둔다
 |---|---|---|
 | V0 | 개인용 수입 OS | 현재 |
 | V0.5 | 반복 입력·문서 추출 자동화 | 본인 수입 건 3개 마감 |
-| V1 | 회사별 Workspace SaaS | 외부 사용자 반복 사용 확인 |
+| V1 | 조직별 SaaS | 외부 사용자 반복 사용 확인 |
 | V1.5 | 판매채널·환율·물류 연동 | 수동 입력 병목이 측정됨 |
 | V2 | 포워더·관세사 건별 협업 | 외부 협업 요청이 반복됨 |
 | V3 | 구매의향 및 MOQ 공동사입 | 동일 SKU 수요와 운영 주체 확보 |
@@ -885,7 +888,7 @@ V0도 DB 직접 수정 없이 장애를 처리할 최소 운영 화면을 둔다
 
 - [x] 아키텍처, ERD, 데이터플로우, 워크플로우, 상태전이, 화면흐름 포함
 - [x] ASCII ID와 인용 라벨 등 Mermaid 문법규칙 적용
-- [x] Workspace, UUID, 타임스탬프, soft delete, schema version 정의
+- [x] Organization 경계, 외부 UUID, 타임스탬프, optimistic lock 정의
 - [x] 엔터티 규모·인덱스 계획 정의
 - [ ] HTML 변환 후 Mermaid 11 실제 렌더 확인 필요
 

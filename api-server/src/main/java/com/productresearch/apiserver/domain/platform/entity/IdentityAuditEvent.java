@@ -1,6 +1,7 @@
 package com.productresearch.apiserver.domain.platform.entity;
 
 import com.productresearch.apiserver.domain.identity.entity.*;
+import com.productresearch.apiserver.domain.partner.entity.BusinessPartner;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -52,6 +53,16 @@ public class IdentityAuditEvent {
         event.targetType = "ORGANIZATION_APPLICATION"; event.targetId = applicationId.toString();
         event.oldValue = before; event.newValue = after; event.reason = reason;
         event.organization = organization; event.requestId = UUID.randomUUID(); event.occurredAt = LocalDateTime.now();
+        return event;
+    }
+
+    public static IdentityAuditEvent businessPartner(AppUser actor, BusinessPartner partner) {
+        IdentityAuditEvent event = new IdentityAuditEvent();
+        event.actor = actor; event.actorType = "USER"; event.action = "BUSINESS_PARTNER_CREATED";
+        event.targetType = "BUSINESS_PARTNER"; event.targetId = partner.getPublicId().toString();
+        event.organization = partner.getOwnerOrganization();
+        event.newValue = partner.getRoles().toString(); event.reason = "거래처 등록";
+        event.requestId = UUID.randomUUID(); event.occurredAt = LocalDateTime.now();
         return event;
     }
 }

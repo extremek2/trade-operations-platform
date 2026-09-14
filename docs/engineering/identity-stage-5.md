@@ -1,5 +1,7 @@
 # 5단계: 외부 업체·건별 이메일 참여
 
+> 역사 기록: 이 문서의 `partner_company`와 migration 번호는 작성 당시 기준이다. 현재는 `business_partner`와 V1/V2 기준선을 사용한다.
+
 - 작성일: 2026-09-08
 - 상태: 구현·검증 완료
 - 기준: [가입 승인 및 참여 권한 설계](../product/identity-access-approval-design-v1.md)

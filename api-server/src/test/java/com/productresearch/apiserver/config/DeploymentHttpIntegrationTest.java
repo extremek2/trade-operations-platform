@@ -10,7 +10,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties={"app.auth.allowed-origins=https://trade.example.com","app.auth.secure-cookie=true","app.research-enabled=false"})
+@SpringBootTest(properties={"app.auth.allowed-origins=https://trade.example.com","app.auth.secure-cookie=true"})
 @AutoConfigureMockMvc
 class DeploymentHttpIntegrationTest extends PostgresTestSupport {
     @Autowired MockMvc mvc;
@@ -23,9 +23,5 @@ class DeploymentHttpIntegrationTest extends PostgresTestSupport {
     @Test void cookieRemovalRetainsSecureHttpOnlySameSiteAndPath() throws Exception {
         mvc.perform(post("/api/v1/auth/logout")).andExpect(status().isOk())
             .andExpect(header().string("Set-Cookie",org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("Secure"),org.hamcrest.Matchers.containsString("HttpOnly"),org.hamcrest.Matchers.containsString("SameSite=Strict"),org.hamcrest.Matchers.containsString("Path=/api/v1/auth"))));
-    }
-    @Test void researchEndpointsAreClosedInIdentityReleaseConfiguration() throws Exception {
-        mvc.perform(get("/api/v1/products").with(user("test").roles("OWNER"))).andExpect(status().isForbidden());
-        mvc.perform(get("/api/v1/clusters").with(user("test").roles("OWNER"))).andExpect(status().isForbidden());
     }
 }

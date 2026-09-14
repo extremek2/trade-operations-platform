@@ -11,7 +11,8 @@ import { ErrorMessage, LoadingState } from "./components/Feedback";
 import ShipmentDashboardPage from "./pages/ShipmentDashboardPage";
 import ShipmentCreatePage from "./pages/ShipmentCreatePage";
 import ShipmentDetailPage from "./pages/ShipmentDetailPage";
-import ResearchPage from "./pages/ResearchPage";
+import ProductsPage from "./pages/ProductsPage";
+import SourcingPage from "./pages/SourcingPage";
 import OrganizationMembersPage from "./pages/OrganizationMembersPage";
 import ExternalAccessPage from "./pages/ExternalAccessPage";
 import ExternalCasePage from "./pages/ExternalCasePage";
@@ -62,7 +63,8 @@ function Routes() {
     if (!["OWNER", "ADMIN"].includes(user.role)) return <AccessDenied navigate={navigate} home="/"/>;
     page = <OrganizationMembersPage/>;
   }
-  else if (path === "/research") return process.env.REACT_APP_RESEARCH_ENABLED === "false" ? <Redirect to="/" navigate={navigate}/> : <ResearchPage onExit={() => navigate("/")}/>;
+  else if (path === "/products") page = <ProductsPage/>;
+  else if (path === "/sourcing") page = <SourcingPage/>;
   else if (path === "/shipments/new") page = <ShipmentCreatePage navigate={navigate}/>;
   else if (/^\/shipments\/[^/]+$/.test(path)) page = <ShipmentDetailPage shipmentId={path.split("/")[2]} navigate={navigate}/>;
   else page = <ShipmentDashboardPage navigate={navigate}/>;

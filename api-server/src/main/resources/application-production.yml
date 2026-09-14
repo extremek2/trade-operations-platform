@@ -26,7 +26,6 @@ app:
   auth:
     allowed-origins: ${APP_ALLOWED_ORIGINS:}
     secure-cookie: true
-  research-enabled: false
 server:
   forward-headers-strategy: native
   tomcat:

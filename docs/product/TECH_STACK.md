@@ -1,7 +1,7 @@
 # 프로젝트 기술 스택 및 아키텍처 기준
 
 > 문서 상태: 기술 기준 문서
-> 기준일: 2026-09-12
+> 기준일: 2026-09-15
 > 적용 범위: Product Research Platform, SourcePilot, Import Keyword Discovery, TradeGuard Ops
 > 목적: 상품화 가능한 무역 운영 ERP를 기본 경로로 유지하면서 개인용 운영 도구로도 축소 가능한 기술·구조 기준을 고정한다.
 
@@ -10,6 +10,16 @@
 ## 1. 문서 역할
 
 이 문서는 프로젝트의 기술 선택과 서비스 경계를 결정하는 기준 문서다.
+
+### 현재 구현 기준선
+
+[ADR-0002](../architecture/ADR-0002-core-domain-and-clean-baseline.md)에 따라 현재 실행 구성은
+`React → Spring Boot → PostgreSQL`이다. Research Python 서버, Celery, Redis, 자동화·staging
+스키마는 퇴역 또는 조건부 설계이며 현재 구성 요소가 아니다. Flyway는 기본 PostgreSQL 스키마에
+V1(인증·조직·화물·협업)과 V2(Product·BusinessPartner·SupplierQuote)를 설치한다.
+
+이 문서 아래의 Worker, Redis, Outbox, 다중 논리 스키마 설명은 자동화가 실제로 다시 선택될 때의
+목표 계약이다. 현재 상태로 읽거나 테이블을 미리 만들 근거로 사용하지 않는다.
 
 - PRD는 제품 요구사항과 업무 흐름을 정의한다.
 - 이 문서는 런타임, 데이터 소유권, 통신 계약, 배포 및 품질 기준을 정의한다.
@@ -106,15 +116,15 @@ frontend/src/
 | 인증·인가 | Spring Security | 현재 | 조직 단위 권한 적용 |
 | 마이그레이션 | Flyway | 현재 | Spring 소유 스키마의 DDL 책임자 |
 | 상태 확인 | Actuator·Micrometer | 현재/목표 | 헬스·메트릭·추적 |
-| 테스트 | JUnit·Spring Test·Testcontainers | 현재/목표 | PostgreSQL 통합 테스트 적용, Redis 계약 테스트 보강 필요 |
+| 테스트 | JUnit·Spring Test·Testcontainers | 현재 | 빈 PostgreSQL 설치와 조직 격리 통합 테스트 적용 |
 
 권장 도메인 모듈은 다음과 같다.
 
 ```text
 identity       사용자·조직·외부 참여자
-catalog        상품·SKU·Variant
+catalog        단일 Product 생명주기, 필요 시 Variant
 discovery      키워드·시장 신호
-sourcing       후보·공급처·견적·샘플
+sourcing       공급 견적·견적 행·샘플
 tradecase      후보부터 입고까지 장기 프로세스 조정
 procurement    PO·송금 상태·생산 일정
 logistics      선적·B/L·Package·통관
@@ -148,16 +158,15 @@ audit          변경 이력·근거
 
 | 항목 | 선택 | 상태 | 비고 |
 |---|---|---|---|
-| 언어 | Python | 현재 | 데이터·ML 생태계 활용 |
-| 내부 API | FastAPI | 목표 | 현재 브라우저용 `/api/v1`이 혼재하며 `/internal/v1`로 전환 예정 |
-| 작업 큐 | Celery | 현재 | 수집·OCR·임베딩·군집 작업 |
-| 브로커·캐시 | Redis 7 | 현재 | 영구 업무 원장으로 사용 금지 |
-| ORM | SQLAlchemy | 현재/목표 | 현재 코어 테이블 매핑이 남아 있으며 목표는 `automation`·`staging` 전용 |
-| 마이그레이션 | Alembic | 목표 | Python 소유 스키마의 DDL 책임자 |
-| ML | PyTorch·Sentence Transformers·scikit-learn | 현재 | 임베딩·유사도·군집화 |
-| 데이터 처리 | pandas·NumPy | 현재 | 배치·정규화 |
-| LLM | LLM Gateway | 목표 | 공급자·모델 교체 가능 구조 |
-| 구조화 출력 | JSON Schema 검증 | 목표 | 실패 시 재시도·규칙 기반 폴백 |
+| 언어 | Python | 조건부 | 반복 자동화 요구가 측정될 때 데이터·ML 작업에 사용 |
+| 내부 API | FastAPI | 조건부 | 도입 시 외부 공개 없이 `/internal/v1` 계약만 제공 |
+| 작업 큐 | Celery | 조건부 | 단순 동기 작업으로 감당할 수 없을 때 검토 |
+| 브로커·캐시 | Redis | 조건부 | 영구 업무 원장으로 사용 금지 |
+| ORM | SQLAlchemy | 조건부 | 도입 시 `automation`·`staging` 전용 |
+| 마이그레이션 | Alembic | 조건부 | Python 소유 스키마가 생길 때만 도입 |
+| ML | 목적에 맞는 최소 라이브러리 | 조건부 | 실제 모델 작업과 함께 선택 |
+| LLM | LLM Gateway | 조건부 | 공급자·모델을 코어 도메인에서 격리 |
+| 구조화 출력 | JSON Schema 검증 | 조건부 | 실패 시 수동 입력 폴백 |
 
 AI는 다음을 결정하지 않는다.
 
@@ -174,9 +183,10 @@ AI는 다음을 결정하지 않는다.
 | 가변 속성 | JSONB | 현재/목표 | 원본·스냅샷·카테고리 속성에 제한 |
 | 벡터 검색 | pgvector | 조건부 | 데이터량·지연 측정 후 인덱스 도입 |
 | 객체 저장소 | S3 호환 Object Storage | 목표 | 문서·이미지·견적 파일 |
-| 캐시 | Redis | 현재 | 재생성 가능한 데이터만 저장 |
+| 캐시 | Redis | 조건부 | 현재 미사용, 도입 시 재생성 가능한 데이터만 저장 |
 
-PostgreSQL 논리 스키마는 다음과 같이 분리한다.
+현재는 단일 애플리케이션과 기본 `public` 스키마를 사용한다. 서비스가 실제로 분리될 때만 다음
+논리 스키마와 DB 역할 분리를 적용한다.
 
 | 스키마 | 소유자 | 용도 |
 |---|---|---|
@@ -189,7 +199,7 @@ PostgreSQL 논리 스키마는 다음과 같이 분리한다.
 
 금액, 통화, 수량, 상태, 날짜, SKU, 재고, 환율, 승인 여부는 일반 컬럼으로 저장한다. JSONB는 외부 원본, 가변 속성, 계산 입력 스냅샷, OCR·LLM 결과 등에 제한한다.
 
-### 3.5 AI 서버 저장 정책
+### 3.5 조건부 자동화 저장 정책
 
 AI 서버는 Redis 캐시만으로 운영하지 않는다. 큐와 캐시가 사라져도 작업을 복구하고 결과의 출처를 재현할 수 있도록 PostgreSQL과 Object Storage에 영속 데이터를 남긴다. 별도 물리 데이터베이스는 필요하지 않으며, 초기에는 코어와 같은 PostgreSQL 인스턴스의 논리 스키마를 사용한다.
 
@@ -410,9 +420,7 @@ PO 발행, 원가 확정, 재고 차감, 송금 및 법적 판단은 온라인 �
 
 - Docker Compose
 - PostgreSQL
-- Redis
 - Spring Core API
-- FastAPI·Celery Worker
 - React 개발 서버
 
 ### 9.2 운영 환경
@@ -421,9 +429,9 @@ PO 발행, 원가 확정, 재고 차감, 송금 및 법적 판단은 온라인 �
 |---|---|
 | Web | 정적 호스팅 또는 CDN |
 | Core API | 관리형 컨테이너 런타임 |
-| Automation | 별도 내부 컨테이너·Worker |
+| Automation | 조건 충족 시 별도 내부 컨테이너·Worker |
 | Database | 관리형 PostgreSQL |
-| Queue·Cache | 관리형 Redis |
+| Queue·Cache | 자동화 도입 시 관리형 Redis 검토 |
 | Files | S3 호환 Object Storage |
 | Secrets | 플랫폼 Secret Manager |
 
@@ -447,10 +455,10 @@ PO 발행, 원가 확정, 재고 차감, 송금 및 법적 판단은 온라인 �
 
 - 계산식과 상태 전이는 결정론적 단위 테스트를 둔다.
 - 조직 간 데이터 접근 차단 통합 테스트를 둔다.
-- PostgreSQL·Redis는 Testcontainers 기반 통합 테스트를 우선한다.
+- PostgreSQL은 Testcontainers 기반 통합 테스트를 우선한다.
 - 외부 Provider는 fixture와 contract test를 둔다.
-- 비동기 작업은 중복 실행, 재시도, timeout, 취소, 부분 성공을 테스트한다.
-- Spring→FastAPI 작업 요청과 FastAPI→Spring Callback은 양방향 contract test를 둔다.
+- 비동기 작업을 도입하면 중복 실행, 재시도, timeout, 취소, 부분 성공을 테스트한다.
+- 자동화 서비스를 도입하면 Spring 요청과 Worker Callback에 양방향 contract test를 둔다.
 - 런타임 DB 계정이 다른 서비스 스키마에 쓸 수 없는지 권한 테스트를 둔다.
 - Spring Modulith `ApplicationModules.verify()`로 금지된 모듈 의존을 검사한다.
 - OpenAPI 변경은 하위 호환성 검사를 통과해야 한다.
@@ -475,18 +483,15 @@ PO 발행, 원가 확정, 재고 차감, 송금 및 법적 판단은 온라인 �
 
 ## 12. 전환 우선순위
 
-### P0 — 구조 고정
+### P0 — 코어 기준선 (완료)
 
-- [ ] `core`와 `automation` 데이터 소유권 분리
-- [ ] Python의 코어 업무 테이블 직접 쓰기 제거
-- [ ] `core.automation_job`과 `automation.automation_run` 분리
-- [ ] Spring→FastAPI 요청·Callback 계약과 멱등성 정의
-- [ ] 외부 자동화 명령용 Transactional Outbox 적용
-- [ ] 내부 모듈 이벤트용 Spring Modulith Event Publication Registry 적용
-- [ ] Migration Role·Spring Role·Python Role DB 권한 분리
-- [ ] Spring Flyway와 Python Alembic의 DDL 소유 범위 분리
-- [ ] 조직 경계 통합 테스트 추가
-- [ ] Candidate → PO → Shipment → Inventory Lot 추적 ID 설계
+- [x] Python의 코어 업무 테이블 직접 쓰기와 브라우저 직접 호출 제거
+- [x] 사용하지 않는 Research·AI·Celery·Redis 런타임 제거
+- [x] 빈 DB용 V1/V2 Flyway 기준선 적용
+- [x] Product 단일 생명주기와 BusinessPartner 역할 모델 적용
+- [x] Product → SupplierQuote 조직 경계 통합 테스트 추가
+
+자동화가 없는 현재 단계에는 `automation_job`, Outbox, Python Alembic을 만들지 않는다.
 
 ### P1 — 기술 현대화
 
@@ -515,68 +520,12 @@ PO 발행, 원가 확정, 재고 차감, 송금 및 법적 판단은 온라인 �
 
 ## 13. 현재 구현 감사 결과
 
-이 절은 목표 구조가 아니라 2026-09-12 현재 저장소 루트에서 확인된 기술 부채다.
+2026-09-15 기준 P0의 데이터 소유권 중복과 브라우저 FastAPI 직접 호출은 제거됐다. 현재 가장 큰
+제품 공백은 견적 API를 사용할 화면과 견적 간 비교 규칙이다. 그 다음은 예상 원가
+`CostScenario`이며, PO·입고·재고는 실제 선행 흐름이 확인된 뒤 추가한다.
 
-### P0 — 데이터 소유권 중복
-
-Python SQLAlchemy Model과 Spring Flyway/JPA가 다음 업무 테이블을 함께 사용한다.
-
-```text
-source_product
-product
-product_cluster
-product_cluster_item
-sku_master
-retail_source
-retail_popular_product
-wholesale_source
-wholesale_product
-```
-
-이 상태에서는 한쪽의 컬럼, 제약, 상태 규칙 변경이 다른 쪽을 런타임에 깨뜨릴 수 있다. 즉시 테이블을 복사하거나 삭제하지 말고 다음 순서로 이전한다.
-
-1. 겹치는 테이블의 신규 스키마 변경을 일시 동결한다.
-2. 각 테이블을 `core` 업무 원장과 `staging` 수집 원본으로 분류한다.
-3. Python 수집 결과를 신규 `staging` 테이블에 쓰도록 변경한다.
-4. Spring Import Use Case가 검증 후 `core`에 반영하게 한다.
-5. Python의 기존 코어 테이블 쓰기를 차단한다.
-6. 읽기 경로 전환과 데이터 대조가 끝난 뒤 중복 Model을 제거한다.
-
-### P0 — 브라우저의 FastAPI 직접 호출
-
-현재 프론트엔드는 `REACT_APP_AI_API_URL`을 가지고 `trend/trigger`, `cluster/trigger`, 작업 상태 API를 직접 호출하며 FastAPI도 브라우저 CORS를 허용한다. 목표 구조에서는 다음과 같이 전환한다.
-
-```text
-Before: Browser → FastAPI → Celery
-After:  Browser → Spring → Outbox → FastAPI → Celery
-```
-
-전환이 끝나면 프론트엔드의 AI API URL을 제거하고 FastAPI의 브라우저 CORS를 비활성화한다.
-
-### P1 — 프론트엔드 SRP 위반
-
-`frontend/src/pages/ResearchPage.js`는 약 992줄이며 다음 책임을 동시에 가진다.
-
-- 대규모 인라인 스타일
-- Spring·FastAPI API Helper
-- 작업 Trigger와 수동 Polling
-- Dashboard·상품·클러스터 UI
-- Toast와 상태 표현
-- 하드코딩된 트렌드 키워드
-
-다음 경계로 분리한다.
-
-```text
-pages/ResearchPage.tsx              라우팅·화면 조합
-modules/research/api/               생성 API Client Wrapper
-modules/research/queries/           Query·Mutation·Job Polling
-modules/research/components/        상품·클러스터·작업 UI
-modules/research/model/             화면 모델·상태 변환
-design-system/                      Toast·Badge·공통 컴포넌트
-styles/                             토큰·페이지 스타일
-```
-
-파일 길이 자체를 품질 기준으로 삼지는 않지만, 변경 이유가 다른 코드가 한 파일에 모이면 분리한다. 단순히 줄 수를 줄이기 위한 컴포넌트 분할은 하지 않는다.
+프론트엔드는 아직 JavaScript와 `react-scripts` 기반이다. 상품·견적 사용자 흐름을 먼저 완성한 뒤
+Vite·TypeScript 전환을 별도 기계적 변경으로 수행한다.
 
 ### P1 — 운영 비밀정보 기본값
 
@@ -619,6 +568,6 @@ ADR에는 문제, 선택지, 결정, 장단점, 마이그레이션과 롤백 방
 frontend/package.json
 api-server/build.gradle.kts
 api-server/src/main/resources/application.yml
-ai-server/requirements.txt
+api-server/src/main/resources/db/migration/
 docker-compose.yml
 ```

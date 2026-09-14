@@ -15,7 +15,7 @@ public class CaseAccess {
         var rows = jdbc.query("""
             SELECT p.id,s.id AS shipment_id,s.public_id,p.public_id AS participant_public_id,p.access_level
             FROM case_participant p JOIN case_partner cp ON cp.id=p.case_partner_id AND cp.shipment_case_id=p.shipment_case_id
-            JOIN partner_company c ON c.id=cp.partner_company_id
+            JOIN business_partner c ON c.id=cp.business_partner_id
             JOIN shipment_case s ON s.id=p.shipment_case_id AND s.owner_organization_id=c.owner_organization_id
             JOIN organization o ON o.id=s.owner_organization_id
             WHERE p.id=? AND p.user_id=? AND p.status='ACTIVE' AND p.access_level IN ('VIEWER','CONTRIBUTOR')

@@ -21,20 +21,23 @@ test('Refresh 세션이 있으면 인증된 조직의 화물을 표시한다', a
   expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/\/shipments\?/), expect.objectContaining({ credentials:'include' }));
 });
 
-test('운영 빌드에서 보류한 리서치 주소와 메뉴는 열리지 않는다', async () => {
-  const previous = process.env.REACT_APP_RESEARCH_ENABLED;
-  process.env.REACT_APP_RESEARCH_ENABLED = 'false';
-  window.history.replaceState({}, '', '/research');
+test('상품 후보 화면은 Spring API만 사용한다', async () => {
+  window.history.replaceState({}, '', '/products');
   jest.spyOn(global, 'fetch').mockImplementation(async url => ({ ok: true, json: async () => ({ success: true,
     data: String(url).includes('/auth/refresh') ? { accessToken: 'token', user: { sessionKind: 'ORGANIZATION', organizationName: '운영 화주', email: 'owner@example.test', role: 'OWNER' } } : [] }) }));
-  try {
-    render(<App/>);
-    expect(await screen.findByText('운영 화주')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '상품 리서치' })).not.toBeInTheDocument();
-    expect(window.location.pathname).toBe('/');
-    expect(global.fetch.mock.calls.some(([url]) => String(url).includes('8000'))).toBe(false);
-  } finally {
-    if (previous === undefined) delete process.env.REACT_APP_RESEARCH_ENABLED;
-    else process.env.REACT_APP_RESEARCH_ENABLED = previous;
-  }
+  render(<App/>);
+  expect(await screen.findByRole('heading', { level: 1, name: '상품 후보' })).toBeInTheDocument();
+  expect(global.fetch.mock.calls.some(([url]) => String(url).includes('/products'))).toBe(true);
+  expect(global.fetch.mock.calls.some(([url]) => String(url).includes('8000'))).toBe(false);
+});
+
+test('공급 견적 화면은 상품과 거래처와 견적 원장을 함께 조회한다', async () => {
+  window.history.replaceState({}, '', '/sourcing');
+  jest.spyOn(global, 'fetch').mockImplementation(async url => ({ ok: true, json: async () => ({ success: true,
+    data: String(url).includes('/auth/refresh') ? { accessToken: 'token', user: { sessionKind: 'ORGANIZATION', organizationName: '운영 화주', email: 'owner@example.test', role: 'OWNER' } } : [] }) }));
+  render(<App/>);
+  expect(await screen.findByRole('heading', { level: 1, name: '공급 견적' })).toBeInTheDocument();
+  expect(global.fetch.mock.calls.some(([url]) => String(url).endsWith('/products'))).toBe(true);
+  expect(global.fetch.mock.calls.some(([url]) => String(url).endsWith('/quotes'))).toBe(true);
+  expect(global.fetch.mock.calls.some(([url]) => String(url).endsWith('/organizations/current/partners'))).toBe(true);
 });

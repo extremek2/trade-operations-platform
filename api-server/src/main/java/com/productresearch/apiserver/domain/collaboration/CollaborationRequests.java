@@ -1,13 +1,12 @@
 package com.productresearch.apiserver.domain.collaboration;
 
 import jakarta.validation.constraints.*;
+import com.productresearch.apiserver.domain.partner.entity.BusinessPartner;
 import java.util.UUID;
 
 public final class CollaborationRequests {
-    public enum CompanyType { FORWARDER, CUSTOMS_BROKER }
     public enum Level { VIEWER, CONTRIBUTOR }
-    public record Company(@NotBlank @Size(max=200) String name, @NotNull CompanyType type) {}
-    public record Attach(@NotNull UUID companyId) {}
+    public record Attach(@NotNull UUID businessPartnerId, @NotNull BusinessPartner.Role role) {}
     public record Invite(@NotBlank @Size(max=200) String name, @NotBlank @Email @Size(max=255) String email,
                          @NotNull Level accessLevel) {}
     public record Revoke(@NotBlank @Size(max=500) String reason) {}

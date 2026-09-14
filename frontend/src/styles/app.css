@@ -112,3 +112,5 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .partner-people button { flex-shrink: 0; white-space: nowrap; }
 .partner-form,.partner-confirm { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 20px; max-width: 620px; }
 .partner-confirm p { overflow-wrap: anywhere; }
+.sourcing-forms { align-items:start; }
+.quote-table tbody tr { cursor:default; }

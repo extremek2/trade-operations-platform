@@ -32,7 +32,6 @@ public class SecurityConfig {
 
     @Value("${app.auth.jwt-secret}") private String jwtSecret;
     @Value("${app.auth.allowed-origins:http://localhost:3000}") private String allowedOrigins;
-    @Value("${app.research-enabled:true}") private boolean researchEnabled;
 
     @Bean
     @org.springframework.context.annotation.Profile("!bootstrap-admin & !maintenance")
@@ -44,12 +43,11 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> {
-                    if (!researchEnabled) auth.requestMatchers("/api/v1/products/**", "/api/v1/clusters/**").denyAll();
                     auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/organizations").denyAll()
                         .requestMatchers("/api/v1/system-admin/**").hasRole("SYSTEM_ADMIN")
                         .requestMatchers("/api/v1/case-workspace/**").hasAnyRole("CASE_VIEWER", "CASE_CONTRIBUTOR")
-                        .requestMatchers("/api/v1/shipments/**", "/api/v1/organizations/**").hasAnyRole("OWNER", "ADMIN", "OPERATOR", "VIEWER")
+                        .requestMatchers("/api/v1/shipments/**", "/api/v1/organizations/**", "/api/v1/products/**", "/api/v1/quotes/**").hasAnyRole("OWNER", "ADMIN", "OPERATOR", "VIEWER")
                         .requestMatchers(
                                 "/api/v1/auth/signup",
                                 "/api/v1/auth/login",
@@ -59,8 +57,6 @@ public class SecurityConfig {
                                 "/api/v1/auth/case-links/confirm",
                                 "/api/v1/auth/refresh",
                                 "/api/v1/auth/logout",
-                                "/api/v1/products/**",
-                                "/api/v1/clusters/**",
                                 "/swagger-ui/**",
                                 "/api-docs/**",
                                 "/swagger-ui.html",

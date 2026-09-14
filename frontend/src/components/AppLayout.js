@@ -5,7 +5,8 @@ import { useAuth } from "../context/AuthContext";
 const navigation = [
   { path: "/", label: "화물 현황" },
   { path: "/shipments/new", label: "화물 등록" },
-  { path: "/research", label: "상품 리서치" },
+  { path: "/products", label: "상품 후보" },
+  { path: "/sourcing", label: "공급 견적" },
 ];
 
 export default function AppLayout({ path, navigate, children }) {
@@ -25,7 +26,7 @@ export default function AppLayout({ path, navigate, children }) {
           <span>Trade Ops<small>B/L operation hub</small></span>
         </button>
         <nav>
-          {navigation.filter(item => item.path !== "/research" || process.env.REACT_APP_RESEARCH_ENABLED !== "false").map((item) => (
+          {navigation.map((item) => (
             <button key={item.path} className={`nav-link ${path === item.path ? "active" : ""}`}
                     onClick={() => navigate(item.path)}>{item.label}</button>
           ))}

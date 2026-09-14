@@ -35,33 +35,25 @@ public class CollaborationService {
     @Value("${app.collaboration.invitation-days:7}") private int invitationDays;
     @Value("${app.collaboration.login-minutes:15}") private int loginMinutes;
 
-    @Transactional(readOnly=true)
-    public List<Map<String,Object>> companies() {
-        var a=manager(false);
-        return jdbc.queryForList("SELECT public_id AS \"companyId\",name,company_type AS type FROM partner_company WHERE owner_organization_id=? ORDER BY name,id",a.organization().getId());
-    }
-    @Transactional
-    public Map<String,Object> createCompany(Company request) {
-        var a=manager(true);
-        var rows=jdbc.queryForList("INSERT INTO partner_company(owner_organization_id,name,company_type) VALUES (?,?,?) RETURNING public_id AS \"companyId\",name,company_type AS type",a.organization().getId(),request.name().trim(),request.type().name());
-        audit(a.user().getId(),a.organization().getId(),"PARTNER_COMPANY_CREATED","PARTNER_COMPANY",rows.get(0).get("companyId"),null,request.type().name(),"외부 업체 등록");
-        return rows.get(0);
-    }
     @Transactional
     public Map<String,Object> attach(UUID shipmentId,Attach request) {
         var a=manager(true); var s=ownedShipment(shipmentId,a.organization().getId(),true);
-        var companies=jdbc.queryForList("SELECT id FROM partner_company WHERE public_id=? AND owner_organization_id=?",request.companyId(),a.organization().getId());
-        if(companies.isEmpty()) throw missing();
-        var rows=jdbc.queryForList("INSERT INTO case_partner(shipment_case_id,partner_company_id) VALUES (?,?) RETURNING public_id AS \"casePartnerId\"",s.get("id"),companies.get(0).get("id"));
-        audit(a.user().getId(),a.organization().getId(),"CASE_PARTNER_ATTACHED","CASE_PARTNER",rows.get(0).get("casePartnerId"),null,request.companyId().toString(),"건별 업체 연결");
+        if(!List.of(com.productresearch.apiserver.domain.partner.entity.BusinessPartner.Role.FORWARDER,
+                com.productresearch.apiserver.domain.partner.entity.BusinessPartner.Role.CUSTOMS_BROKER).contains(request.role()))
+            throw new BusinessException("건별 협업에는 포워더 또는 관세사 역할만 연결할 수 있습니다.");
+        var businessPartners=jdbc.queryForList("SELECT p.id FROM business_partner p JOIN business_partner_role r ON r.business_partner_id=p.id WHERE p.public_id=? AND p.owner_organization_id=? AND p.status='ACTIVE' AND r.partner_role=?",request.businessPartnerId(),a.organization().getId(),request.role().name());
+        if(businessPartners.isEmpty()) throw missing();
+        var rows=jdbc.queryForList("INSERT INTO case_partner(shipment_case_id,business_partner_id,partner_role) VALUES (?,?,?) RETURNING public_id AS \"casePartnerId\"",s.get("id"),businessPartners.get(0).get("id"),request.role().name());
+        audit(a.user().getId(),a.organization().getId(),"CASE_PARTNER_ATTACHED","CASE_PARTNER",rows.get(0).get("casePartnerId"),null,request.businessPartnerId()+":"+request.role(),"건별 업체 연결");
         return rows.get(0);
     }
     @Transactional(readOnly=true)
     public List<Map<String,Object>> partners(UUID shipmentId) {
         var a=manager(false); var s=ownedShipment(shipmentId,a.organization().getId(),false);
         var rows=jdbc.queryForList("""
-            SELECT cp.public_id AS "casePartnerId",c.public_id AS "companyId",c.name,c.company_type AS type,cp.id
-            FROM case_partner cp JOIN partner_company c ON c.id=cp.partner_company_id WHERE cp.shipment_case_id=? ORDER BY cp.id
+            SELECT cp.public_id AS "casePartnerId",c.public_id AS "businessPartnerId",c.name,cp.partner_role AS role,cp.id
+            FROM case_partner cp JOIN business_partner c ON c.id=cp.business_partner_id
+            WHERE cp.shipment_case_id=? ORDER BY cp.id
             """,s.get("id"));
         for(var row:rows) {
             var participants=jdbc.queryForList("""
@@ -87,9 +79,9 @@ public class CollaborationService {
         String email=request.email().trim().toLowerCase(Locale.ROOT);
         var contacts=jdbc.queryForList("SELECT * FROM external_contact WHERE owner_organization_id=? AND lower(btrim(email))=?",a.organization().getId(),email);
         Long contactId;
-        if(contacts.isEmpty()) contactId=jdbc.queryForObject("INSERT INTO external_contact(owner_organization_id,partner_company_id,name,company_name,email,contact_type) VALUES (?,?,?,?,?,?) RETURNING id",Long.class,a.organization().getId(),cp.get("partner_company_id"),request.name().trim(),cp.get("name"),email,cp.get("company_type"));
+        if(contacts.isEmpty()) contactId=jdbc.queryForObject("INSERT INTO external_contact(owner_organization_id,business_partner_id,name,email) VALUES (?,?,?,?) RETURNING id",Long.class,a.organization().getId(),cp.get("business_partner_id"),request.name().trim(),email);
         else {
-            if(contacts.size()!=1 || !Objects.equals(contacts.get(0).get("partner_company_id"),cp.get("partner_company_id")))
+            if(contacts.size()!=1 || !Objects.equals(contacts.get(0).get("business_partner_id"),cp.get("business_partner_id")))
                 throw new ConflictException("이 이메일은 다른 업체 또는 기존 미분류 연락처에 등록되어 있습니다. 연락처 소속을 확인해 주세요.");
             contactId=((Number)contacts.get(0).get("id")).longValue();
         }
@@ -101,7 +93,7 @@ public class CollaborationService {
             participantId=((Number)p.get("id")).longValue();
             revokeTokens(participantId);
             jdbc.update("UPDATE case_participant SET user_id=NULL,status='INVITED',access_level=?,joined_at=NULL WHERE id=?",request.accessLevel().name(),participantId);
-        } else participantId=jdbc.queryForObject("INSERT INTO case_participant(shipment_case_id,case_partner_id,external_contact_id,participant_role,access_level,status) VALUES (?,?,?,?,?,'INVITED') RETURNING id",Long.class,s.get("id"),cp.get("id"),contactId,cp.get("company_type"),request.accessLevel().name());
+        } else participantId=jdbc.queryForObject("INSERT INTO case_participant(shipment_case_id,case_partner_id,external_contact_id,participant_role,access_level,status) VALUES (?,?,?,?,?,'INVITED') RETURNING id",Long.class,s.get("id"),cp.get("id"),contactId,cp.get("partner_role"),request.accessLevel().name());
         Long invitationId=jdbc.queryForObject("INSERT INTO case_invitation(participant_id,token_hash,target_email,expires_at,created_by) VALUES (?,?,?,?,?) RETURNING id",Long.class,participantId,tokens.hash(tokens.newRefreshToken()),email,LocalDateTime.now().plusDays(invitationDays),a.user().getId());
         sendLink(invitationId);
         audit(a.user().getId(),a.organization().getId(),"CASE_INVITED","CASE_PARTICIPANT",participantId,null,request.accessLevel().name(),"담당자 이메일 초대");
@@ -169,7 +161,7 @@ public class CollaborationService {
     private boolean eligible(Object invitationId) {
         return Boolean.TRUE.equals(jdbc.queryForObject("""
             SELECT EXISTS(SELECT 1 FROM case_invitation i JOIN case_participant p ON p.id=i.participant_id
-            JOIN case_partner cp ON cp.id=p.case_partner_id JOIN partner_company c ON c.id=cp.partner_company_id
+            JOIN case_partner cp ON cp.id=p.case_partner_id JOIN business_partner c ON c.id=cp.business_partner_id
             JOIN shipment_case s ON s.id=p.shipment_case_id JOIN organization o ON o.id=s.owner_organization_id
             WHERE i.id=? AND i.revoked_at IS NULL AND i.invitation_status IN ('PENDING','ACCEPTED')
             AND (i.accepted_at IS NOT NULL OR i.expires_at>NOW()) AND p.status IN ('INVITED','ACTIVE')
@@ -213,7 +205,7 @@ public class CollaborationService {
         return jdbc.queryForList("SELECT * FROM shipment_case WHERE id=? FOR UPDATE",shipmentId).get(0);
     }
     private Map<String,Object> partner(UUID id,Object shipmentId) {
-        var rows=jdbc.queryForList("SELECT cp.*,c.name,c.company_type FROM case_partner cp JOIN partner_company c ON c.id=cp.partner_company_id WHERE cp.public_id=? AND cp.shipment_case_id=? FOR UPDATE OF cp",id,shipmentId);
+        var rows=jdbc.queryForList("SELECT cp.*,c.name FROM case_partner cp JOIN business_partner c ON c.id=cp.business_partner_id WHERE cp.public_id=? AND cp.shipment_case_id=? FOR UPDATE OF cp",id,shipmentId);
         if(rows.isEmpty()) throw missing(); return rows.get(0);
     }
     private void audit(Long userId,Long orgId,String action,String type,Object target,String before,String after,String reason) {

@@ -13,10 +13,6 @@ import static com.productresearch.apiserver.domain.collaboration.CollaborationRe
 @RequiredArgsConstructor
 public class CollaborationController {
     private final CollaborationService service;
-    @GetMapping("/organizations/current/partners")
-    public ApiResponse<List<Map<String,Object>>> companies() { return ApiResponse.ok(service.companies()); }
-    @PostMapping("/organizations/current/partners") @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<Map<String,Object>> createCompany(@Valid @RequestBody Company request) { return ApiResponse.ok(service.createCompany(request)); }
     @GetMapping("/shipments/{shipmentId}/partners")
     public ApiResponse<List<Map<String,Object>>> partners(@PathVariable UUID shipmentId) { return ApiResponse.ok(service.partners(shipmentId)); }
     @PostMapping("/shipments/{shipmentId}/partners") @ResponseStatus(HttpStatus.CREATED)

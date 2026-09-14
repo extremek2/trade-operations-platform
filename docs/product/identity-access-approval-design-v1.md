@@ -1,5 +1,10 @@
 # 가입 승인 및 참여 권한 설계 v1
 
+> **2026-09-15 스키마 기준:** 이 문서의 `partner_company`와 V14~V17 표기는 당시 구현
+> 기록이다. 현재 빈 DB 기준선에서는 `business_partner`와 역할 테이블로 통합됐고 전체 설치 이력은
+> V1/V2다. 현재 물리 모델은 [ADR-0002](../architecture/ADR-0002-core-domain-and-clean-baseline.md)를
+> 우선한다.
+
 - 작성일: 2026-09-08
 - 상태: 1~5단계 구현·검증 완료. 6단계 운영 준비·격리 검증 완료, 실제 환경 확인·적용 대기
 - 기준: [무역 운영 도메인 정의](trade-operations-domain-v1.md)

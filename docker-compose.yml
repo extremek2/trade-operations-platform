@@ -21,106 +21,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7
-    container_name: product_redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  # ──────────────────────────────────────────
-  # AI Server (FastAPI + Celery)
-  # ──────────────────────────────────────────
-  ai-server:
-    build:
-      context: ./ai-server
-      dockerfile: docker/Dockerfile
-    container_name: ai_server
-    restart: unless-stopped
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      api-server:
-        condition: service_healthy
-    ports:
-      - "8000:8000"
-    environment: &python-env
-      DATABASE_URL: postgresql://product_user:product_pass@postgres:5432/product_db
-      REDIS_URL: redis://redis:6379/0
-      NAVER_API_HUB_CLIENT_ID: ${NAVER_API_HUB_CLIENT_ID}
-      NAVER_API_HUB_CLIENT_SECRET: ${NAVER_API_HUB_CLIENT_SECRET}
-      DOMEGGOOK_API_KEY: ${DOMEGGOOK_API_KEY}
-      PYTHONPATH: /app
-      # Database schema migrations are managed exclusively by Spring Boot Flyway.
-    volumes:
-      - ./ai-server:/app
-
-  # ──────────────────────────────────────────
-  # Celery Workers
-  # ──────────────────────────────────────────
-  celery-worker-crawl:
-    build:
-      context: ./ai-server
-      dockerfile: docker/Dockerfile
-    container_name: celery_worker_crawl
-    restart: unless-stopped
-    command: celery -A app.celery.celery_app worker --loglevel=info --queues=crawl --concurrency=4
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      api-server:
-        condition: service_healthy
-    environment:
-      <<: *python-env
-    volumes:
-      - ./ai-server:/app
-
-  celery-worker-cluster:
-    build:
-      context: ./ai-server
-      dockerfile: docker/Dockerfile
-    container_name: celery_worker_cluster
-    restart: unless-stopped
-    command: celery -A app.celery.celery_app worker --loglevel=info --queues=cluster --concurrency=2
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      api-server:
-        condition: service_healthy
-    environment:
-      <<: *python-env
-    volumes:
-      - ./ai-server:/app
-
-  celery-beat:
-    build:
-      context: ./ai-server
-      dockerfile: docker/Dockerfile
-    container_name: celery_beat
-    restart: unless-stopped
-    command: celery -A app.celery.celery_app beat --loglevel=info -s /tmp/celerybeat-schedule
-    depends_on:
-      redis:
-        condition: service_healthy
-      api-server:
-        condition: service_healthy
-    environment:
-      <<: *python-env
-    volumes:
-      - ./ai-server:/app
-
   # ──────────────────────────────────────────
   # API Server (Spring Boot)
   # ──────────────────────────────────────────
@@ -133,16 +33,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/product_db
       SPRING_DATASOURCE_USERNAME: product_user
       SPRING_DATASOURCE_PASSWORD: product_pass
-      SPRING_REDIS_HOST: redis
-      SPRING_REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-me-1234567890}
       AUTH_SECURE_COOKIE: ${AUTH_SECURE_COOKIE:-false}
     healthcheck:
@@ -168,7 +64,6 @@ services:
       - "3000:3000"
     environment:
       REACT_APP_API_URL: http://localhost:8080/api/v1
-      REACT_APP_AI_API_URL: http://localhost:8000/api/v1
       WATCHPACK_POLLING: "true"
     volumes:
       - ./frontend/src:/app/src

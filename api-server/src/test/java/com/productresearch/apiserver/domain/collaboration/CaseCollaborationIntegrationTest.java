@@ -47,8 +47,8 @@ class CaseCollaborationIntegrationTest extends PostgresTestSupport {
         members.save(new OrganizationMember(org,owner,OrganizationMember.Role.OWNER));
         ownerToken=auth.login(new LoginRequest(owner.getEmail(),PASSWORD,null)).response().accessToken();
         shipment=jdbc.queryForObject("INSERT INTO shipment_case(owner_organization_id,case_number,direction,transport_mode,created_by) VALUES (?,?,'IMPORT','SEA',?) RETURNING public_id",UUID.class,org.getId(),UUID.randomUUID().toString(),owner.getId());
-        var c=body(call(post("/api/v1/organizations/current/partners"),ownerToken,Map.of("name","포워더","type","FORWARDER")).andExpect(status().isCreated())).get("companyId").asText();
-        partnerId=body(call(post(base()+"/partners"),ownerToken,Map.of("companyId",c)).andExpect(status().isCreated())).get("casePartnerId").asText();
+        var c=body(call(post("/api/v1/organizations/current/partners"),ownerToken,Map.of("name","포워더","roles",List.of("FORWARDER"))).andExpect(status().isCreated())).get("businessPartnerId").asText();
+        partnerId=body(call(post(base()+"/partners"),ownerToken,Map.of("businessPartnerId",c,"role","FORWARDER")).andExpect(status().isCreated())).get("casePartnerId").asText();
     }
     String base() {return "/api/v1/shipments/"+shipment;}
     String email() {return UUID.randomUUID()+"@example.test";}
@@ -174,13 +174,31 @@ class CaseCollaborationIntegrationTest extends PostgresTestSupport {
         call(get("/api/v1/shipments"),caseToken,null).andExpect(status().isForbidden());
         call(get("/api/v1/shipments"),ownerToken,null).andExpect(status().isOk());
     }
-    @Test void managerCannotAttachOtherOrganizationsCompanyAndOperatorCannotInvite() throws Exception {
+    @Test void managerCannotAttachOtherOrganizationsPartnerAndOperatorCannotInvite() throws Exception {
         var other=organizations.save(new Organization("다른 화주",Organization.Type.SHIPPER,null,null,null));
-        var c=jdbc.queryForObject("INSERT INTO partner_company(owner_organization_id,name,company_type) VALUES (?,'다른 포워더','FORWARDER') RETURNING public_id",UUID.class,other.getId());
-        call(post(base()+"/partners"),ownerToken,Map.of("companyId",c)).andExpect(status().isNotFound());
+        var c=jdbc.queryForObject("INSERT INTO business_partner(owner_organization_id,name) VALUES (?,'다른 포워더') RETURNING public_id",UUID.class,other.getId());
+        jdbc.update("INSERT INTO business_partner_role(business_partner_id,partner_role) SELECT id,'FORWARDER' FROM business_partner WHERE public_id=?",c);
+        call(post(base()+"/partners"),ownerToken,Map.of("businessPartnerId",c,"role","FORWARDER")).andExpect(status().isNotFound());
         jdbc.update("UPDATE organization_member SET member_role='OPERATOR' WHERE user_id=?",owner.getId());
         invitation(email(),"VIEWER").andExpect(status().isForbidden());
         call(get(base()+"/partners"),ownerToken,null).andExpect(status().isForbidden());
+    }
+    @Test void businessPartnerKeepsMultipleRolesAndAttachmentUsesAnExplicitRole() throws Exception {
+        JsonNode created=body(call(post("/api/v1/organizations/current/partners"),ownerToken,
+                Map.of("name","복합 거래처 "+UUID.randomUUID(),"roles",List.of("SUPPLIER","FORWARDER")))
+                .andExpect(status().isCreated()));
+        JsonNode found=null;
+        for(JsonNode candidate:body(call(get("/api/v1/organizations/current/partners"),ownerToken,null))) {
+            if(candidate.get("businessPartnerId").asText().equals(created.get("businessPartnerId").asText())) found=candidate;
+        }
+        assertThat(found).isNotNull();
+        assertThat(json.treeToValue(found.get("roles"),String[].class)).containsExactlyInAnyOrder("SUPPLIER","FORWARDER");
+        call(post(base()+"/partners"),ownerToken,Map.of(
+                "businessPartnerId",created.get("businessPartnerId").asText(),"role","SUPPLIER"))
+                .andExpect(status().isBadRequest());
+        call(post(base()+"/partners"),ownerToken,Map.of(
+                "businessPartnerId",created.get("businessPartnerId").asText(),"role","FORWARDER"))
+                .andExpect(status().isCreated());
     }
     @Test void verificationPurposeCannotConsumeCaseLink() throws Exception {
         var email=email(); invite(email,"VIEWER"); String raw=linkToken(email);
@@ -200,9 +218,9 @@ class CaseCollaborationIntegrationTest extends PostgresTestSupport {
 
     @Test void sameEmailCanJoinTwoCasesAndRevocationIsScopedToOneCase() throws Exception {
         var email=email(); invite(email,"VIEWER"); var first=accept(email); UUID firstShipment=shipment;
-        var companyId=body(call(get(base()+"/partners"),ownerToken,null)).get(0).get("companyId").asText();
+        var businessPartnerId=body(call(get(base()+"/partners"),ownerToken,null)).get(0).get("businessPartnerId").asText();
         UUID second=jdbc.queryForObject("INSERT INTO shipment_case(owner_organization_id,case_number,direction,transport_mode,created_by) VALUES (?,?,'IMPORT','SEA',?) RETURNING public_id",UUID.class,org.getId(),UUID.randomUUID().toString(),owner.getId());
-        String secondPartner=body(call(post("/api/v1/shipments/"+second+"/partners"),ownerToken,Map.of("companyId",companyId)).andExpect(status().isCreated())).get("casePartnerId").asText();
+        String secondPartner=body(call(post("/api/v1/shipments/"+second+"/partners"),ownerToken,Map.of("businessPartnerId",businessPartnerId,"role","FORWARDER")).andExpect(status().isCreated())).get("casePartnerId").asText();
         call(post("/api/v1/shipments/"+second+"/partners/"+secondPartner+"/invitations"),ownerToken,Map.of("name","같은 담당자","email",email,"accessLevel","CONTRIBUTOR")).andExpect(status().isCreated());
         var secondSession=accept(email);
         assertThat(first.at("/user/userId").asText()).isEqualTo(secondSession.at("/user/userId").asText());

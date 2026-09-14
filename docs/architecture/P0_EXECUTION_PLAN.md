@@ -1,162 +1,125 @@
-# P0 실행 계획
+# 코어 도메인 실행 계획
 
-- 상태: 실행 전 초안
-- 선행 결정: [ADR-0001](ADR-0001-p0-service-and-data-ownership.md) 승인
-- 최종 검토일: 2026-09-12
+- 상태: P0 기준선 완료, P1 진행 중
+- 기준 결정: [ADR-0002](ADR-0002-core-domain-and-clean-baseline.md)
+- 최종 검토일: 2026-09-15
 
-이 계획은 각 슬라이스가 독립적으로 테스트되고 롤백될 수 있도록 구성한다. ADR 승인 후 슬라이스 0부터 시작하며, 다음 단계는 이전 단계의 테스트 게이트를 통과한 뒤에만 시작한다. 체크되지 않은 항목이나 테스트 초안의 존재만으로 해당 슬라이스가 완료됐다고 간주하지 않는다.
+이 계획의 원칙은 필요한 사용자 흐름과 Aggregate를 같은 수직 슬라이스에서 추가하는 것이다.
+소형 ERP에 필요할 것 같다는 이유만으로 빈 테이블, 범용 상위 엔터티, 자동화 인프라를 미리 만들지
+않는다.
 
 ## 현재 기준선
 
-### 데이터 소유권 중복
-
-Python에 남아 있는 코어 테이블 매핑:
-
 ```text
-product
-product_cluster
-product_cluster_item
-retail_popular_product
-retail_source
-sku_master
-source_product
-wholesale_product
-wholesale_source
+React -> Spring Boot -> PostgreSQL
 ```
 
-현재 실행 가능한 직접 쓰기는 클러스터와 도매 파이프라인이다. 네이버 상품 수집 제거 후 `popular_pipeline.py`는 호출 라우트가 없지만 코어 쓰기 코드가 남아 있다.
+- 업무 소유 경계: `Organization`
+- 상품 원장: 후보와 판매 상품을 합친 `Product`
+- 거래처 원장: 공급사와 협업 업체를 합친 `BusinessPartner` + 역할
+- 소싱: `SupplierQuote` + `SupplierQuoteLine`
+- DB 설치 이력: `V1__application_baseline.sql`, `V2__catalog_and_sourcing.sql`
+- 자동화 Worker, Redis, Python DB Writer: 현재 런타임에 없음
 
-### 서비스 경계 위반
+## P0 — 경계 정리와 빈 DB 기준선
 
-```text
-Browser -> FastAPI /api/v1/trend
-Browser -> FastAPI /api/v1/cluster
-FastAPI/Celery -> Spring 소유 테이블
-```
+상태: 완료
 
-## 슬라이스 0: 경계 동결
+- [x] Spring/Python 공동 소유 Research 테이블과 API 제거
+- [x] 브라우저의 Python API 직접 호출 제거
+- [x] 사용하지 않는 AI/Celery/Redis 런타임 제거
+- [x] V01~V18을 빈 DB용 V1/V2 기준선으로 재작성
+- [x] 기존 인증·조직·온보딩·화물·외부 협업 회귀 검증
+- [x] 프로젝트 개발 PostgreSQL 볼륨 삭제
 
-목표: 기존 기능을 바꾸지 않고 신규 직접 의존이 추가되는 것을 막는다.
+운영 데이터가 생긴 뒤에는 이 기준선 파일을 수정하지 않고 V3부터 순방향 migration만 추가한다.
 
-- Python 코어 테이블 매핑 허용 목록 테스트
-- 브라우저 FastAPI 직접 호출 허용 파일 테스트
-- 현재 테스트 명령과 결과 기록
+## P1 — 상품·거래처·공급 견적
 
-완료 조건:
+상태: 첫 수동 입력·비교 흐름 완료
 
-```text
-PYTHONPATH=ai-server python3 -m unittest discover -s ai-server/tests -v
-cd frontend && CI=true npm test -- --watchAll=false
-cd api-server && ./gradlew test
-docker compose config --quiet
-```
+- [x] Product 단일 생명주기와 상태 변경 이력
+- [x] 조직별 SKU 유일성 및 optimistic lock
+- [x] BusinessPartner 다중 역할 구조
+- [x] 공급 견적과 행, 미확인 단가의 nullable 표현
+- [x] 조직 간 상품·거래처·견적 참조 차단
+- [x] 상품 후보 등록·목록 UI
+- [x] 공급처 등록 UI
+- [x] 견적 입력·비교 원장 UI
+- [x] 견적 수정 정책: DRAFT는 제자리 수정, RECEIVED 이후 정정은 새 개정본 생성
 
-## 슬라이스 1: 계약과 Spring 작업 원장
+P1 완료 조건은 후보 1개에 서로 다른 공급처 견적 2개를 입력하고 같은 통화·수량 기준으로
+비교할 수 있는 것이다.
 
-목표: Worker 실행 전에 Spring이 사용자 작업을 영속한다.
+## P2 — 예상 원가
 
-- `core.automation_job`
-- `core.automation_outbox`
-- 상태 전이와 Terminal 상태 보호
-- 조직 범위 멱등성 제약
-- Outbox Dispatcher Port와 비활성 기본 Adapter
+상태: 다음 우선순위
 
-테스트:
+첫 견적 비교 흐름이 확인된 뒤에만 다음을 추가한다.
 
-- 상태 전이 단위 테스트
-- 동일 조직/멱등성 키 중복 방지 통합 테스트
-- 다른 조직의 작업 조회 차단 테스트
-- 업무 저장과 Outbox 저장의 원자성 테스트
+- `CostScenario`와 불변 계산 입력 스냅샷
+- 환율, 상품가, 국제운임, 관세·부가세, 국내비용
+- 수량별 단위원가와 목표 판매가 기준 공헌이익
+- 미확인/사용자 가정/공급처 제시 값의 출처 구분
+- decimal 반올림·배부 규칙의 순수 도메인 테스트
 
-롤백: Dispatcher를 비활성화하고 신규 테이블은 유지한다.
+이 단계에서는 실제 비용, 회계 분개, 재고를 만들지 않는다.
 
-## 슬라이스 2: 내부 작업 계약
+## P3 — 매입 발주
 
-목표: Spring과 FastAPI 사이의 버전된 계약을 만든다.
+상태: 보류
 
-- FastAPI `POST /internal/v1/jobs`
-- FastAPI 취소 요청
-- Spring progress/result Callback
-- 서비스 인증
-- `jobId`, `idempotencyKey`, `traceId`, `sequence`, 계약 버전
+- `PurchaseOrder` + `PurchaseOrderLine`
+- 선택된 견적 스냅샷 참조
+- 발주 승인·취소·부분 진행 상태
+- 송금은 먼저 상태와 증빙만 기록하고 결제 실행은 제외
 
-테스트:
+P2에서 실제 발주 결정을 한 사례가 생길 때 시작한다.
 
-- 양방향 contract fixture
-- 중복 접수
-- 순서가 뒤처진 Callback 무시
-- Terminal 상태 회귀 차단
-- timeout과 재전달
+## P4 — 물류 배정과 입고 재고
 
-## 슬라이스 3: 트렌드 Vertical Slice
+상태: 보류
 
-목표: 가장 작은 자동화 작업인 Shopping Insight를 새 경로로 전환한다.
+- 기존 Shipment와 PO Line을 잇는 `ShipmentAllocation`
+- `Receipt`와 `InventoryLot`
+- 발주수량, 선적수량, 입고수량, 판매가능수량 분리
+- 부분 선적·부분 입고를 기본 경로로 검증
 
-```text
-Browser -> Spring -> Outbox -> FastAPI -> Celery
-        <- Spring Callback <- Result Publisher
-```
+Shipment에 Product FK 하나를 직접 넣지 않는다. 한 발주가 여러 선적에 나뉘고 여러 발주가 한
+선적에 합쳐지는 관계를 실제 사례와 함께 모델링한다.
 
-- 프론트엔드 AI API URL 제거
-- FastAPI 브라우저 CORS 제거
-- Spring 작업 조회 API로 폴링 전환
-- 기존 FastAPI 공개 `/api/v1/trend` 제거
+## P5 — 실제 원가·판매·재발주
 
-롤백: Spring의 트렌드 Trigger UI를 기능 플래그로 숨긴다. 브라우저 직접 FastAPI 경로는 복구하지 않는다.
+상태: 보류
 
-## 슬라이스 4: Python 영속 스키마
+- 발생 비용과 배부 결과
+- 예상 원가 대비 실제 원가 차이
+- 판매·반품·채널 비용 관측
+- 재발주/관찰/중단 결정 이력
 
-목표: Python 소유 실행 기록과 결과를 코어 업무 테이블에서 분리한다.
+## 조건부 인프라
 
-- Alembic 도입
-- `automation.automation_run`
-- `automation.automation_result`
-- `staging.provider_snapshot`
-- 만료와 결과 전달 상태
+다음은 요구가 발생하기 전에는 추가하지 않는다.
 
-테스트:
+- ProductVariant: 실제 옵션별 SKU·재고가 필요할 때
+- TradeCase: 여러 Aggregate의 장기 진행을 조정할 필요가 있을 때
+- Outbox/Worker/Redis: 반복 수동 작업이 측정되고 비동기 자동화가 선택될 때
+- Object Storage: 실제 문서 업로드 흐름을 구현할 때
+- 별도 DB 스키마와 서비스: 독립 배포·권한·부하 요구가 확인될 때
 
-- Alembic upgrade/downgrade smoke test
-- 재시도별 실행 기록
-- Redis 초기화 후 복구
-- 결과 Callback 재전달
+## 공통 완료 게이트
 
-## 슬라이스 5: 클러스터와 수집 전환
+각 슬라이스는 다음을 만족해야 완료다.
 
-목표: Python의 코어 테이블 직접 쓰기를 제거한다.
+- 인증 컨텍스트에서 조직 범위를 결정하고 요청 Body의 조직 ID를 신뢰하지 않는다.
+- 다른 조직 엔터티 참조가 API와 통합 테스트에서 차단된다.
+- 상태 전이, optimistic lock, 중복 키와 nullable 의미가 테스트된다.
+- 새 테이블은 실제 API 또는 운영 작업의 소유자가 있다.
+- 빈 PostgreSQL에서 Flyway와 JPA validation이 통과한다.
+- 백엔드·프론트 전체 회귀와 Compose 문법 검사가 통과한다.
 
-- 클러스터 입력 Snapshot 계약
-- 클러스터 결과 Callback과 Spring 반영 Use Case
-- 도매 원본 `staging` 적재
-- Spring 검증/Import Use Case
-- 사용되지 않는 `popular_pipeline.py` 제거
-- 코어 SQLAlchemy Model 제거
+## 파괴적 작업과 승인 경계
 
-테스트:
-
-- 기존/신규 결과 대조
-- 동일 입력 재처리 멱등성
-- 부분 성공
-- 조직 혼입 차단
-
-## 슬라이스 6: DB 권한과 Modulith
-
-목표: 코드 규칙을 DB와 모듈 테스트로 강제한다.
-
-- 플랫폼 초기화용 Schema/Role 생성
-- Spring Flyway와 Python Alembic Role 분리
-- 런타임 Role의 교차 스키마 쓰기 차단
-- Spring Modulith 도입과 `ApplicationModules.verify()`
-- 내부 Event Publication Registry 적용
-
-권한 차단은 모든 쓰기 경로 전환과 데이터 대조가 완료된 뒤 적용한다.
-
-## 별도 설계 트랙
-
-Candidate → PO → Shipment → Inventory Lot은 아직 Candidate, PO, Inventory Aggregate가 구현되지 않았다. P0에서는 공통 ID를 억지로 기존 Shipment 테이블에 추가하지 않고 다음 식별 규칙을 먼저 고정한다.
-
-- 외부 계약 ID는 UUID를 사용한다.
-- 각 Aggregate는 자체 ID와 `organization_id`를 소유한다.
-- `tradecase`는 Aggregate ID만 참조한다.
-- 문서번호와 외부 ID의 유일성은 조직 범위로 제한한다.
-- 향후 Aggregate 도입 ADR에서 전이와 참조 무결성을 확정한다.
+- 이번 개발 DB 볼륨 삭제는 ADR-0002 범위에서 승인됐다.
+- 운영/외부 DB, 다른 Docker 볼륨, 실제 메일 발송, 외부 서비스 공개는 별도 승인 없이는 수행하지 않는다.
+- 데이터가 생긴 뒤 migration 재작성, 대량 삭제, 테넌트 병합은 반드시 별도 전환 계획과 백업을 요구한다.

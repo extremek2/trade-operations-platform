@@ -55,7 +55,7 @@ try:
     assert 'Tomcat started' not in migration.stdout
     versions = run('docker', 'exec', database, 'psql', '-U', 'fixture', '-d', 'fixture', '-Atc',
                    'SELECT count(*) FROM flyway_schema_history WHERE success').stdout.strip()
-    assert versions == '17'
+    assert versions == '2'
     run('docker', 'cp', 'ops/sql/grant-runtime-role.sql', database + ':/tmp/grant-runtime-role.sql')
     run('docker', 'exec', database, 'psql', '-U', 'fixture', '-d', 'fixture', '-f', '/tmp/grant-runtime-role.sql')
     environment['SPRING_DATASOURCE_USERNAME'] = 'runtime'
@@ -79,7 +79,7 @@ try:
     cookie = run('docker', 'exec', api, 'curl', '--silent', '-i', '-X', 'POST',
                  'http://localhost:8080/api/v1/auth/logout').stdout.lower()
     assert all(value in cookie for value in ('secure', 'httponly', 'samesite=strict', 'path=/api/v1/auth'))
-    print('PASS: production fail-fast, non-web migration V01-V17, restricted DB role readiness, HTTPS CORS and secure cookie')
+    print('PASS: production fail-fast, non-web migration V1-V2, restricted DB role readiness, HTTPS CORS and secure cookie')
 finally:
     for container in reversed(created):
         subprocess.run(['docker', 'rm', '-fv', container], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

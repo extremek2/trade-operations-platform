@@ -14,7 +14,7 @@ class DeploymentRehearsalTest {
             database.withEnv("APP_DB_USER","runtime_fixture").withEnv("APP_DB_PASSWORD","test-only-runtime-password");
             database.start();
             var migration=Flyway.configure().dataSource(database.getJdbcUrl(),database.getUsername(),database.getPassword());
-            migration.target("13").load().migrate();
+            migration.load().migrate();
             exec(database,"psql","-U",database.getUsername(),"-d",database.getDatabaseName(),"-v","ON_ERROR_STOP=1","-c","""
                 INSERT INTO organization(name,organization_type) VALUES ('restore fixture','SHIPPER');
                 INSERT INTO app_user(email,name) VALUES ('restore@example.test','restore fixture');
@@ -27,9 +27,6 @@ class DeploymentRehearsalTest {
             exec(database,"createdb","-U",database.getUsername(),"candidate");
             exec(database,"pg_restore","-U",database.getUsername(),"-d","candidate","--no-owner","--exit-on-error","/tmp/before.dump");
             String candidate="jdbc:postgresql://"+database.getHost()+":"+database.getMappedPort(5432)+"/candidate";
-            // Exercise the actual migration-only entry point; SMTP and HTTP remain disabled.
-            SpringServerApplication.main(new String[]{"--migrate-only","--spring.datasource.url="+candidate,
-                "--spring.datasource.username="+database.getUsername(),"--spring.datasource.password="+database.getPassword()});
             exec(database,"psql","-U",database.getUsername(),"-d","candidate","-f","/tmp/postflight.sql");
             exec(database,"psql","-U",database.getUsername(),"-d","candidate","-f","/tmp/grant-runtime-role.sql");
             try(var c=DriverManager.getConnection(candidate,"runtime_fixture","test-only-runtime-password");var sql=c.createStatement()) {
@@ -38,12 +35,13 @@ class DeploymentRehearsalTest {
                 assertThatThrownBy(() -> sql.execute("DELETE FROM identity_audit_event")).isInstanceOf(SQLException.class);
                 assertThatThrownBy(() -> sql.execute("UPDATE flyway_schema_history SET success=false")).isInstanceOf(SQLException.class);
             }
-            assertThat(query(database,database.getJdbcUrl(),"SELECT max(installed_rank) FROM flyway_schema_history")).isEqualTo("13");
+            assertThat(query(database,database.getJdbcUrl(),"SELECT max(installed_rank) FROM flyway_schema_history")).isEqualTo("2");
             assertThat(query(database,candidate,"SELECT count(*) FROM organization_member WHERE member_role='OWNER'")).isEqualTo("1");
             exec(database,"psql","-U",database.getUsername(),"-d","candidate","-v","ON_ERROR_STOP=1","-c","""
-                INSERT INTO partner_company(owner_organization_id,name,company_type) VALUES(1,'fixture partner','FORWARDER');
-                INSERT INTO case_partner(shipment_case_id,partner_company_id) VALUES(1,1);
-                INSERT INTO external_contact(owner_organization_id,partner_company_id,name,email,contact_type) VALUES(1,1,'fixture contact','restore@example.test','FORWARDER');
+                INSERT INTO business_partner(owner_organization_id,name) VALUES(1,'fixture partner');
+                INSERT INTO business_partner_role(business_partner_id,partner_role) VALUES(1,'FORWARDER');
+                INSERT INTO case_partner(shipment_case_id,business_partner_id,partner_role) VALUES(1,1,'FORWARDER');
+                INSERT INTO external_contact(owner_organization_id,business_partner_id,name,email) VALUES(1,1,'fixture contact','restore@example.test');
                 INSERT INTO case_participant(shipment_case_id,case_partner_id,user_id,external_contact_id,participant_role,access_level,status) VALUES(1,1,1,1,'FORWARDER','VIEWER','ACTIVE');
                 INSERT INTO case_invitation(participant_id,token_hash,target_email,expires_at,created_by,invitation_status,accepted_at) VALUES(1,'fixture invitation','restore@example.test',NOW()+INTERVAL '7 days',1,'ACCEPTED',NOW());
                 INSERT INTO email_auth_token(purpose,invitation_id,target_email,token_hash,expires_at) VALUES('CASE_LOGIN',1,'restore@example.test','fixture token',NOW()+INTERVAL '15 minutes');

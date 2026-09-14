@@ -143,8 +143,8 @@ class IdentityAccessIntegrationTest extends PostgresTestSupport {
         mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + owner.response().accessToken())).andExpect(status().isUnauthorized());
     }
 
-    @Test void migrationMapsExistingSessionsAndRejectsInvalidContext() {
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='14' AND success", Integer.class)).isEqualTo(1);
+    @Test void baselineCreatesSessionsAndRejectsInvalidContext() {
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version IN ('1','2') AND success", Integer.class)).isEqualTo(2);
         var tokens = owner();
         assertThatThrownBy(() -> jdbc.update("UPDATE refresh_session SET session_kind='PLATFORM' WHERE user_id=(SELECT id FROM app_user WHERE public_id=?)", tokens.response().user().userId()));
     }
