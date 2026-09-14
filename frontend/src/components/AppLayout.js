@@ -8,6 +8,7 @@ const navigation = [
   { path: "/products", label: "상품 후보" },
   { path: "/sourcing", label: "공급 견적" },
   { path: "/costing", label: "예상 원가" },
+  { path: "/trade-cycle", label: "수입 사이클" },
 ];
 
 export default function AppLayout({ path, navigate, children }) {

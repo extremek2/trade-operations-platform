@@ -14,6 +14,7 @@ import ShipmentDetailPage from "./pages/ShipmentDetailPage";
 import ProductsPage from "./pages/ProductsPage";
 import SourcingPage from "./pages/SourcingPage";
 import CostingPage from "./pages/CostingPage";
+import TradeCyclePage from "./pages/TradeCyclePage";
 import OrganizationMembersPage from "./pages/OrganizationMembersPage";
 import ExternalAccessPage from "./pages/ExternalAccessPage";
 import ExternalCasePage from "./pages/ExternalCasePage";
@@ -67,6 +68,7 @@ function Routes() {
   else if (path === "/products") page = <ProductsPage/>;
   else if (path === "/sourcing") page = <SourcingPage/>;
   else if (path === "/costing") page = <CostingPage/>;
+  else if (path === "/trade-cycle") page = <TradeCyclePage navigate={navigate}/>;
   else if (path === "/shipments/new") page = <ShipmentCreatePage navigate={navigate}/>;
   else if (/^\/shipments\/[^/]+$/.test(path)) page = <ShipmentDetailPage shipmentId={path.split("/")[2]} navigate={navigate}/>;
   else page = <ShipmentDashboardPage navigate={navigate}/>;
