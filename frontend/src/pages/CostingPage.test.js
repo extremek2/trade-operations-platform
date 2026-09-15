@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createCostScenario, getCostScenarios } from "../api/costingApi";
 import { getQuotes } from "../api/quoteApi";
+import { getPurchaseSelections } from "../api/supplierOfferApi";
 import CostingPage from "./CostingPage";
 
 jest.mock("../api/costingApi", () => ({
@@ -8,6 +9,7 @@ jest.mock("../api/costingApi", () => ({
   getCostScenarios: jest.fn(),
 }));
 jest.mock("../api/quoteApi", () => ({ getQuotes: jest.fn() }));
+jest.mock("../api/supplierOfferApi", () => ({ getPurchaseSelections: jest.fn() }));
 jest.mock("../context/AuthContext", () => ({
   useAuth: () => ({ user: { role: "OWNER" } }),
 }));
@@ -40,7 +42,16 @@ beforeEach(() => {
   window.scrollTo = jest.fn();
   getQuotes.mockResolvedValue([quote]);
   getCostScenarios.mockResolvedValue([scenario]);
+  getPurchaseSelections.mockResolvedValue([]);
   createCostScenario.mockResolvedValue({});
+});
+
+test("구매 선택의 희망 수량을 예상 원가 입력에 가져온다", async () => {
+  getPurchaseSelections.mockResolvedValue([{ quoteId: "quote-1", lines: [{ productId: "product-1", desiredQuantity: 24 }] }]);
+  render(<CostingPage/>);
+  const form = await screen.findByRole("form", { name: "원가 시나리오 입력" });
+  fireEvent.change(within(form).getByLabelText("견적 품목"), { target: { value: "quote-1:product-1" } });
+  expect(within(form).getByLabelText("주문수량")).toHaveValue(24);
 });
 
 test("저장된 decimal 결과와 입력 출처·부가세 관점을 비교한다", async () => {

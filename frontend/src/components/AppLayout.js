@@ -6,6 +6,7 @@ const navigation = [
   { path: "/", label: "화물 현황" },
   { path: "/shipments/new", label: "화물 등록" },
   { path: "/products", label: "상품 후보" },
+  { path: "/supplier-offers", label: "공급 상품 제안" },
   { path: "/sourcing", label: "공급 견적" },
   { path: "/costing", label: "예상 원가" },
   { path: "/trade-cycle", label: "수입 사이클" },

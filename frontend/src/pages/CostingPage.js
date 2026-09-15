@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createCostScenario, getCostScenarios } from "../api/costingApi";
 import { getQuotes } from "../api/quoteApi";
+import { getPurchaseSelections } from "../api/supplierOfferApi";
 import { EmptyState, ErrorMessage, LoadingState } from "../components/Feedback";
 import StatusBadge from "../components/StatusBadge";
 import { useAuth } from "../context/AuthContext";
@@ -45,6 +46,7 @@ export default function CostingPage() {
   const editable = editableRoles.includes(user?.role);
   const [quotes, setQuotes] = useState([]);
   const [scenarios, setScenarios] = useState([]);
+  const [selections, setSelections] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,8 +55,10 @@ export default function CostingPage() {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const [quoteRows, scenarioRows] = await Promise.all([getQuotes(), getCostScenarios()]);
-      setQuotes(quoteRows); setScenarios(scenarioRows);
+      const [quoteRows, scenarioRows, selectionRows] = await Promise.all([
+        getQuotes(), getCostScenarios(), getPurchaseSelections(),
+      ]);
+      setQuotes(quoteRows); setScenarios(scenarioRows); setSelections(selectionRows);
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }, []);
@@ -73,12 +77,15 @@ export default function CostingPage() {
 
   const selectQuoteLine = key => {
     const item = quoteLines.find(option => option.key === key);
+    const chosen = selections.flatMap(selection => selection.quoteId === item?.quote.quoteId ? selection.lines : [])
+      .find(line => line.productId === item?.line.productId);
     setForm(current => ({
       ...current,
       quoteLineKey: key,
       previousScenarioId: "",
       scenarioName: item ? `${item.line.productName} 기준안` : current.scenarioName,
-      orderQuantity: item?.line.minimumQuantity == null ? current.orderQuantity : String(item.line.minimumQuantity),
+      orderQuantity: chosen ? String(chosen.desiredQuantity)
+        : item?.line.minimumQuantity == null ? current.orderQuantity : String(item.line.minimumQuantity),
       exchangeRate: item?.quote.currency === "KRW" ? "1" : current.exchangeRate,
     }));
   };

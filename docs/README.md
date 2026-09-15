@@ -50,11 +50,14 @@
 |---|---|
 | [ADR-0001: Core와 Automation 소유권 분리](architecture/ADR-0001-p0-service-and-data-ownership.md) | 승인, 공동 DB 경로 제거 완료 |
 | [ADR-0002: 코어 도메인과 빈 DB 기준선](architecture/ADR-0002-core-domain-and-clean-baseline.md) | 승인, 개발 기준선 적용 완료 |
-| [코어 도메인 실행 계획](architecture/P0_EXECUTION_PLAN.md) | P0~P5 첫 수직 사이클 완료, P6 공급 제안 수집·승인 구현 대기 |
+| [코어 도메인 실행 계획](architecture/P0_EXECUTION_PLAN.md) | P0~P5 첫 수직 사이클 완료, P6 제안 접수·구매 선택·견적/원가 인계 구현 |
 
 ## 구현·검증 기록
 
 `engineering/identity-stage-1.md`부터 `identity-stage-6.md`까지는 가입 승인과 건별 외부 참여 작업의 단계별 기록이다. 각 문서의 테스트 수치와 마이그레이션 범위는 작성 당시의 결과이며, 최신 전체 검증을 뜻하지 않는다.
+
+[P6 첫 단계](engineering/supplier-offer-stage-1.md)는 수동 공급 제안 접수와 행별 추출 확인의 구현 기록이다.
+[P6 두 번째 단계](engineering/supplier-offer-stage-2.md)는 일부 품목 구매 선택과 기존 견적·예상 원가 인계의 구현 기록이다.
 
 - [1단계: 시스템 권한과 인증 세션](engineering/identity-stage-1.md)
 - [2단계: 조직 개설 신청 백엔드](engineering/identity-stage-2.md)
