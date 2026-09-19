@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { getBusinessPartners } from "../api/partnerApi";
 import { getProducts } from "../api/productApi";
-import { createPurchaseSelection, createSupplierOfferDraft, getPurchaseSelections, getSupplierOfferDrafts } from "../api/supplierOfferApi";
+import { createPurchaseSelection, createSupplierOfferDraft, getPurchaseSelections, getSupplierOfferDrafts, importSupplierOfferFile } from "../api/supplierOfferApi";
 import SupplierOfferPage from "./SupplierOfferPage";
 
 jest.mock("../api/partnerApi", () => ({ getBusinessPartners: jest.fn() }));
@@ -9,13 +9,13 @@ jest.mock("../api/productApi", () => ({ getProducts: jest.fn() }));
 jest.mock("../api/supplierOfferApi", () => ({
   confirmSupplierOfferDraft: jest.fn(), createPurchaseSelection: jest.fn(),
   createSupplierOfferDraft: jest.fn(), excludeSupplierOfferLine: jest.fn(),
-  getPurchaseSelections: jest.fn(), getSupplierOfferDrafts: jest.fn(), reviewSupplierOfferLine: jest.fn(),
+  getPurchaseSelections: jest.fn(), getSupplierOfferDrafts: jest.fn(), importSupplierOfferFile: jest.fn(), reviewSupplierOfferLine: jest.fn(),
 }));
 jest.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { role: "OWNER" } }) }));
 
 const draft = {
   draftId: "draft-1", supplierName: "오사카 공급처", supplierId: "supplier-1",
-  status: "CONFIRMED", version: 4, currency: "JPY", originalText: "A, B, C 원본",
+  status: "CONFIRMED", version: 4, currency: "JPY", sourceType: "MANUAL", originalText: "A, B, C 원본",
   lines: [
     { lineNumber: 1, originalName: "원본 A", reviewedName: "확인 A", status: "CONFIRMED", quantityUnit: "EA", minimumQuantity: 10, unitPrice: 280 },
     { lineNumber: 2, originalName: "원본 B", reviewedName: "확인 B", status: "CONFIRMED", quantityUnit: "EA", minimumQuantity: 5, unitPrice: 190 },
@@ -31,6 +31,19 @@ beforeEach(() => {
   getPurchaseSelections.mockResolvedValue([]);
   createPurchaseSelection.mockResolvedValue({});
   createSupplierOfferDraft.mockResolvedValue({});
+  importSupplierOfferFile.mockResolvedValue({});
+});
+
+test("CSV/XLSX 파일과 기본 메타데이터를 가져오기 API에 보낸다", async () => {
+  render(<SupplierOfferPage navigate={jest.fn()}/>);
+  const form = await screen.findByRole("form", { name: "공급 제안 파일 가져오기" });
+  const file = new File(["상품명,단가\n테스트,100"], "offer.csv", { type: "text/csv" });
+  fireEvent.change(within(form).getByLabelText("공급처"), { target: { value: "supplier-1" } });
+  fireEvent.change(within(form).getByLabelText(/제안 파일/), { target: { files: [file] } });
+  fireEvent.click(within(form).getByRole("button", { name: "파일 분석해 검토 초안 만들기" }));
+  await waitFor(() => expect(importSupplierOfferFile).toHaveBeenCalledWith({
+    supplierId: "supplier-1", currency: "JPY", sourceReference: undefined, file,
+  }));
 });
 
 test("수동 원본과 상품명 행을 검토 초안으로 등록한다", async () => {

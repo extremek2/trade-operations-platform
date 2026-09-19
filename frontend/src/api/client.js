@@ -26,9 +26,10 @@ export class ApiError extends Error {
 const authenticationEndpoints = new Set(["/auth/signup", "/auth/login", "/auth/platform/login", "/auth/refresh", "/auth/logout"]);
 
 export async function apiRequest(path, options = {}, retry = true) {
+  const multipart = typeof FormData !== "undefined" && options.body instanceof FormData;
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...options.headers },
+    headers: { ...(!multipart && { "Content-Type": "application/json" }), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...options.headers },
     credentials: "include",
   });
   if (response.status === 401 && retry && !authenticationEndpoints.has(path)) {

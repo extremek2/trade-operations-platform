@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Locale;
 
 @Entity
@@ -29,6 +30,7 @@ public class SupplierOfferDraftLine {
     @Column(name = "unit_price", precision = 19, scale = 4) private BigDecimal unitPrice;
     @Column(name = "country_of_origin", length = 2) private String countryOfOrigin;
     @Column(name = "notes") private String notes;
+    @Column(name = "extraction_errors") private String extractionErrors;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private Status status;
     @Column(name = "reviewed_at") private LocalDateTime reviewedAt;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "reviewed_by") private AppUser reviewedBy;
@@ -41,6 +43,21 @@ public class SupplierOfferDraftLine {
         this.originalName = originalName.trim();
         this.sourceLocation = blankToNull(sourceLocation);
         this.status = Status.PENDING;
+    }
+
+    public void applyExtraction(String reviewedName, String supplierSku, String quantityUnit,
+                                BigDecimal minimumQuantity, BigDecimal unitPrice, String countryOfOrigin,
+                                String notes, List<String> errors) {
+        ensureEditable();
+        this.reviewedName = blankToNull(reviewedName);
+        this.supplierSku = blankToNull(supplierSku);
+        this.quantityUnit = blankToNull(quantityUnit);
+        this.minimumQuantity = minimumQuantity;
+        this.unitPrice = unitPrice;
+        String origin = blankToNull(countryOfOrigin);
+        this.countryOfOrigin = origin == null ? null : origin.toUpperCase(Locale.ROOT);
+        this.notes = blankToNull(notes);
+        this.extractionErrors = errors == null || errors.isEmpty() ? null : String.join("\n", errors);
     }
 
     public void review(String reviewedName, String supplierSku, String quantityUnit,
@@ -59,6 +76,7 @@ public class SupplierOfferDraftLine {
         this.unitPrice = unitPrice;
         this.countryOfOrigin = origin == null ? null : origin.toUpperCase(Locale.ROOT);
         this.notes = blankToNull(notes);
+        this.extractionErrors = null;
         this.status = Status.CONFIRMED;
         this.reviewedAt = LocalDateTime.now();
     }

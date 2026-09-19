@@ -16,7 +16,7 @@ import java.util.UUID;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class SourceArtifact {
-    public enum SourceType { MANUAL }
+    public enum SourceType { MANUAL, CSV, XLSX }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(name = "public_id", nullable = false, unique = true, updatable = false) private UUID publicId;
@@ -24,7 +24,10 @@ public class SourceArtifact {
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "supplier_id") private BusinessPartner supplier;
     @Enumerated(EnumType.STRING) @Column(name = "source_type", nullable = false) private SourceType sourceType;
     @Column(name = "source_reference") private String sourceReference;
-    @Column(name = "original_text", nullable = false, columnDefinition = "text") private String originalText;
+    @Column(name = "original_text", columnDefinition = "text") private String originalText;
+    @Column(name = "original_file_name") private String originalFileName;
+    @Column(name = "binary_content") private byte[] binaryContent;
+    @Column(name = "file_size") private Long fileSize;
     @Column(name = "content_type", nullable = false) private String contentType;
     @Column(name = "content_hash", nullable = false, length = 64) private String contentHash;
     @Column(name = "received_at", nullable = false, updatable = false) private LocalDateTime receivedAt;
@@ -41,6 +44,28 @@ public class SourceArtifact {
         this.sourceReference = sourceReference == null || sourceReference.isBlank() ? null : sourceReference.trim();
         this.originalText = originalText;
         this.contentType = "text/plain";
+        this.contentHash = contentHash;
+    }
+
+    public SourceArtifact(Organization organization, BusinessPartner supplier, AppUser createdBy,
+                          SourceType sourceType, String sourceReference, String originalFileName,
+                          String contentType, byte[] binaryContent, String contentHash) {
+        if (sourceType == null || sourceType == SourceType.MANUAL)
+            throw new IllegalArgumentException("파일 원본 형식이 올바르지 않습니다.");
+        if (originalFileName == null || originalFileName.isBlank())
+            throw new IllegalArgumentException("원본 파일명은 필수입니다.");
+        if (binaryContent == null || binaryContent.length == 0)
+            throw new IllegalArgumentException("원본 파일 내용은 필수입니다.");
+        this.publicId = UUID.randomUUID();
+        this.organization = organization;
+        this.supplier = supplier;
+        this.createdBy = createdBy;
+        this.sourceType = sourceType;
+        this.sourceReference = sourceReference == null || sourceReference.isBlank() ? null : sourceReference.trim();
+        this.originalFileName = originalFileName.trim();
+        this.contentType = contentType;
+        this.binaryContent = binaryContent.clone();
+        this.fileSize = (long) binaryContent.length;
         this.contentHash = contentHash;
     }
 

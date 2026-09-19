@@ -4,6 +4,14 @@ export const getSupplierOfferDrafts = () => apiRequest("/supplier-offer-drafts")
 export const createSupplierOfferDraft = payload => apiRequest("/supplier-offer-drafts", {
   method: "POST", body: JSON.stringify(payload),
 });
+export const importSupplierOfferFile = ({ supplierId, currency, sourceReference, file }) => {
+  const body = new FormData();
+  body.append("supplierId", supplierId);
+  body.append("currency", currency);
+  if (sourceReference) body.append("sourceReference", sourceReference);
+  body.append("file", file);
+  return apiRequest("/supplier-offer-drafts/import", { method: "POST", body });
+};
 export const reviewSupplierOfferLine = (draftId, lineNumber, payload) =>
   apiRequest(`/supplier-offer-drafts/${draftId}/lines/${lineNumber}`, {
     method: "PUT", body: JSON.stringify(payload),

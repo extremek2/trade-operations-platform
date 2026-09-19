@@ -3,13 +3,15 @@ import { getBusinessPartners } from "../api/partnerApi";
 import { getProducts } from "../api/productApi";
 import {
   confirmSupplierOfferDraft, createPurchaseSelection, createSupplierOfferDraft,
-  excludeSupplierOfferLine, getPurchaseSelections, getSupplierOfferDrafts, reviewSupplierOfferLine,
+  excludeSupplierOfferLine, getPurchaseSelections, getSupplierOfferDrafts, importSupplierOfferFile,
+  reviewSupplierOfferLine,
 } from "../api/supplierOfferApi";
 import { EmptyState, ErrorMessage, LoadingState } from "../components/Feedback";
 import { useAuth } from "../context/AuthContext";
 
 const editableRoles = ["OWNER", "ADMIN", "OPERATOR"];
 const initialForm = { supplierId: "", sourceReference: "", originalText: "", currency: "JPY", linesText: "" };
+const initialFileForm = { supplierId: "", sourceReference: "", currency: "JPY", file: null };
 const optionalNumber = value => value === "" ? undefined : Number(value);
 const optionalText = value => value.trim() || undefined;
 
@@ -34,6 +36,7 @@ function ReviewLine({ draft, line, editable, saving, run }) {
   return <fieldset className="quote-line-editor">
     <legend>원본 행 {line.lineNumber} · {line.status === "PENDING" ? "확인 대기" : line.status === "EXCLUDED" ? "제외" : "확인됨"}</legend>
     <p><strong>{line.originalName}</strong> <small>{line.sourceLocation || "위치 미입력"}</small></p>
+    {line.extractionErrors && <div className="alert error" role="alert">자동 추출 확인 필요: {line.extractionErrors}</div>}
     {editable && draft.status === "REVIEW_REQUIRED" ? <form className="setup-form" onSubmit={review}>
       <div className="form-grid two">
         <label>확인 상품명<input required maxLength="500" value={form.reviewedName} onChange={event => update("reviewedName", event.target.value)}/></label>
@@ -103,6 +106,8 @@ export default function SupplierOfferPage({ navigate }) {
   const [drafts, setDrafts] = useState([]);
   const [selections, setSelections] = useState([]);
   const [form, setForm] = useState(initialForm);
+  const [fileForm, setFileForm] = useState(initialFileForm);
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -146,11 +151,40 @@ export default function SupplierOfferPage({ navigate }) {
     if (created) setForm(current => ({ ...initialForm, supplierId: current.supplierId }));
   };
   const update = (field, value) => setForm(current => ({ ...current, [field]: value }));
+  const updateFile = (field, value) => setFileForm(current => ({ ...current, [field]: value }));
+  const submitFile = async event => {
+    event.preventDefault();
+    if (!fileForm.file) { setError("가져올 CSV 또는 XLSX 파일을 선택해 주세요."); return; }
+    if (fileForm.file.size > 2 * 1024 * 1024) { setError("파일은 2MB 이하여야 합니다."); return; }
+    const imported = await run(() => importSupplierOfferFile({
+      supplierId: fileForm.supplierId, currency: fileForm.currency,
+      sourceReference: optionalText(fileForm.sourceReference), file: fileForm.file,
+    }));
+    if (imported) {
+      setFileForm(current => ({ ...initialFileForm, supplierId: current.supplierId }));
+      setFileInputKey(current => current + 1);
+    }
+  };
 
   return <>
     <header className="page-header"><div><span className="eyebrow">SUPPLIER OFFER</span><h1>공급 상품 제안</h1>
       <p>원본을 보존하고 추출값을 확인한 뒤 살 품목만 견적 원장으로 넘깁니다.</p></div></header>
     <ErrorMessage message={error}/>
+    {editable && <section className="panel"><div className="panel-header"><div><h2>제안 파일 가져오기</h2>
+      <p className="muted">UTF-8 CSV 또는 XLSX의 첫 번째 표시 시트를 읽습니다. 원본은 해시와 함께 보존하며 수식은 실행하지 않습니다.</p></div></div>
+      {suppliers.length === 0 ? <EmptyState title="공급처가 없습니다." description="공급 견적 화면에서 공급처를 먼저 등록하세요."/> :
+        <form className="setup-form" aria-label="공급 제안 파일 가져오기" onSubmit={submitFile}>
+          <div className="form-grid two">
+            <label>공급처<select required value={fileForm.supplierId} onChange={event => updateFile("supplierId", event.target.value)}>
+              <option value="">선택</option>{suppliers.map(item => <option key={item.businessPartnerId} value={item.businessPartnerId}>{item.name}</option>)}
+            </select></label>
+            <label>통화<input required pattern="[A-Za-z]{3}" maxLength="3" value={fileForm.currency} onChange={event => updateFile("currency", event.target.value.toUpperCase())}/></label>
+          </div>
+          <label>원본 위치 <span className="optional">선택</span><input maxLength="2000" value={fileForm.sourceReference} onChange={event => updateFile("sourceReference", event.target.value)}/></label>
+          <label>제안 파일 <span className="optional">CSV/XLSX · 최대 2MB</span><input key={fileInputKey} required type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={event => updateFile("file", event.target.files?.[0] || null)}/></label>
+          <button className="button primary" disabled={saving}>파일 분석해 검토 초안 만들기</button>
+        </form>}
+    </section>}
     {editable && <section className="panel"><div className="panel-header"><div><h2>수동 제안 등록</h2>
       <p className="muted">파일·URL 자동 추출 전에는 받은 내용을 직접 입력합니다. URL은 참고 위치로만 저장합니다.</p></div></div>
       {suppliers.length === 0 ? <EmptyState title="공급처가 없습니다." description="공급 견적 화면에서 공급처를 먼저 등록하세요."/> :
@@ -174,7 +208,9 @@ export default function SupplierOfferPage({ navigate }) {
             {editable && draft.status === "REVIEW_REQUIRED" && <button className="button secondary" disabled={saving || draft.lines.some(line => line.status === "PENDING")}
               onClick={() => run(() => confirmSupplierOfferDraft(draft.draftId, draft.version))}>추출 확인</button>}
           </div>
-          <details><summary>원본 내용 보기 · {draft.sourceReference || "수동 입력"}</summary><pre>{draft.originalText}</pre></details>
+          {draft.sourceType === "MANUAL" ?
+            <details><summary>원본 내용 보기 · {draft.sourceReference || "수동 입력"}</summary><pre>{draft.originalText}</pre></details> :
+            <details><summary>원본 파일 정보 · {draft.originalFileName}</summary><p>{draft.sourceType} · {draft.fileSize?.toLocaleString()} bytes · SHA-256 {draft.contentHash}</p>{draft.sourceReference && <p>{draft.sourceReference}</p>}</details>}
           {draft.lines.map(line => <ReviewLine key={`${draft.draftId}:${line.lineNumber}`} draft={draft} line={line}
             editable={editable} saving={saving} run={run}/>)}
           {editable && draft.status === "CONFIRMED" && <SelectionForm draft={draft}

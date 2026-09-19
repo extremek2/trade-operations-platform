@@ -1,6 +1,6 @@
 # 코어 도메인 실행 계획
 
-- 상태: P0~P5 첫 수직 사이클 완료, P6 수동 제안 접수부터 다품목 발주·입고·실제 원가 연결 구현, 결정론적 파일 파서 대기
+- 상태: P0~P5 첫 수직 사이클 완료, P6 제안 접수부터 다품목 거래 사이클과 CSV/XLSX 결정론적 파서 구현
 - 기준 결정: [ADR-0002](ADR-0002-core-domain-and-clean-baseline.md)
 - 최종 검토일: 2026-09-19
 
@@ -18,7 +18,7 @@ React -> Spring Boot -> PostgreSQL
 - 상품 원장: 후보와 판매 상품을 합친 `Product`
 - 거래처 원장: 공급사와 협업 업체를 합친 `BusinessPartner` + 역할
 - 소싱: `SupplierQuote` + `SupplierQuoteLine`
-- DB 설치 이력: V1 기준선부터 V9 다품목 발주까지 순방향 migration
+- DB 설치 이력: V1 기준선부터 V10 CSV/XLSX 제안 파일 수집까지 순방향 migration
 - 자동화 Worker, Redis, Python DB Writer: 현재 런타임에 없음
 
 ## P0 — 경계 정리와 빈 DB 기준선
@@ -251,6 +251,16 @@ Orosy처럼 API가 있는 공급처는 OCR을 거치지 않고 구조화 데이�
 - 다음 시작점: 파일 해시와 원본 보존을 포함한 Excel/CSV 결정론적 파서와 멱등 재업로드.
 - 상세 기록: [P6 세 번째 단계](../engineering/supplier-offer-stage-3.md)
 
+### P6 CSV/XLSX 파일 수집 결과
+
+- V10에서 2MB 이하 CSV/XLSX 원본 바이너리·파일명·크기·콘텐츠 형식·SHA-256을 보존한다.
+- UTF-8 CSV와 XLSX 첫 표시 시트를 수식·매크로 실행 없이 읽고, 지원 헤더를 결정론적으로 매핑한다.
+- 형식 전체의 문제는 업로드를 거절하고 값 문제는 행별 오류로 남겨 사용자가 수정·확인 또는 제외한다.
+- 같은 조직·공급처·파일 해시를 다시 올리면 새 원본과 초안을 만들지 않고 기존 초안을 반환한다.
+- 합성 fixture로 구현 계약을 검증했으며 실제 공급처 파일 변형은 아직 확인하지 않았다.
+- 다음 시작점: 익명화한 실제 공급처 CSV/XLSX로 헤더·날짜·병합 셀 변형을 수집하거나 텍스트 PDF 파서를 추가한다.
+- 상세 기록: [P6 네 번째 단계](../engineering/supplier-offer-stage-4.md)
+
 ## 조건부 인프라
 
 다음은 요구가 발생하기 전에는 추가하지 않는다.
@@ -258,7 +268,7 @@ Orosy처럼 API가 있는 공급처는 OCR을 거치지 않고 구조화 데이�
 - ProductVariant: 실제 옵션별 SKU·재고가 필요할 때
 - TradeCase: 여러 Aggregate의 장기 진행을 조정할 필요가 있을 때
 - Outbox/Worker/Redis: 반복 수동 작업이 측정되고 비동기 자동화가 선택될 때
-- Object Storage: P6에서 실제 바이너리 문서 업로드를 시작할 때 선택·추가한다
+- Object Storage: 현재 2MB 이하 제안 파일은 PostgreSQL에 보존한다. 파일 크기·보관량이 커질 때 선택·추가한다
 - 별도 DB 스키마와 서비스: 독립 배포·권한·부하 요구가 확인될 때
 
 ## 공통 완료 게이트

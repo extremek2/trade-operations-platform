@@ -41,3 +41,11 @@ test("갱신 서버의 일시 장애는 세션 만료로 처리하지 않는다"
     expect(listener).not.toHaveBeenCalled();
   } finally { unsubscribe(); }
 });
+
+test("FormData 요청은 브라우저가 multipart boundary를 설정하도록 Content-Type을 비운다", async () => {
+  const { apiRequest } = require("./client");
+  const body = new FormData(); body.append("file", new Blob(["상품명\n테스트"]), "offer.csv");
+  jest.spyOn(global, "fetch").mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: {} }) });
+  await apiRequest("/supplier-offer-drafts/import", { method: "POST", body });
+  expect(global.fetch.mock.calls[0][1].headers["Content-Type"]).toBeUndefined();
+});

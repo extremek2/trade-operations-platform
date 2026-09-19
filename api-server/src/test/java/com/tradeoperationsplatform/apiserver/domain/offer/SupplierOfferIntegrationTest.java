@@ -21,8 +21,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,6 +43,8 @@ class SupplierOfferIntegrationTest extends PostgresTestSupport {
     @Autowired PasswordEncoder passwords;
     @Autowired ProductRepository products;
     @Autowired SupplierQuoteRepository quotes;
+    @Autowired SourceArtifactRepository artifacts;
+    @Autowired SupplierOfferDraftRepository drafts;
 
     String owner;
     String other;
@@ -50,6 +54,63 @@ class SupplierOfferIntegrationTest extends PostgresTestSupport {
         owner = member(OrganizationMember.Role.OWNER);
         other = member(OrganizationMember.Role.OWNER);
         viewer = member(OrganizationMember.Role.VIEWER);
+    }
+
+    @Test
+    void importsXlsxPreservesItsIdentityAndReturnsSameDraftOnRetry() throws Exception {
+        JsonNode supplier = body(call(post("/api/v1/organizations/current/partners"), owner,
+                Map.of("name", "파일 제안 공급처 " + UUID.randomUUID(), "roles", List.of("SUPPLIER")))
+                .andExpect(status().isCreated()));
+        byte[] content = Objects.requireNonNull(getClass().getResourceAsStream(
+                "/fixtures/supplier-offer-synthetic.xlsx")).readAllBytes();
+        MockMultipartFile file = new MockMultipartFile("file", "supplier-offer.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", content);
+        long artifactCount = artifacts.count();
+        long draftCount = drafts.count();
+
+        call(multipart("/api/v1/supplier-offer-drafts/import")
+                .param("supplierId", supplier.get("businessPartnerId").asText()).param("currency", "JPY"), owner, null)
+                .andExpect(status().isBadRequest());
+        call(multipart("/api/v1/supplier-offer-drafts/import")
+                        .file(new MockMultipartFile("file", "offer.txt", "text/plain",
+                                "상품명".getBytes(StandardCharsets.UTF_8)))
+                        .param("supplierId", supplier.get("businessPartnerId").asText()).param("currency", "JPY"), owner, null)
+                .andExpect(status().isBadRequest());
+
+        JsonNode imported = body(call(multipart("/api/v1/supplier-offer-drafts/import").file(file)
+                        .param("supplierId", supplier.get("businessPartnerId").asText())
+                        .param("currency", "jpy").param("sourceReference", "synthetic fixture"), owner, null)
+                .andExpect(status().isCreated()));
+
+        assertThat(imported.get("sourceType").asText()).isEqualTo("XLSX");
+        assertThat(imported.get("originalFileName").asText()).isEqualTo("supplier-offer.xlsx");
+        assertThat(imported.get("fileSize").asLong()).isEqualTo(content.length);
+        assertThat(imported.get("originalText").isNull()).isTrue();
+        assertThat(imported.get("contentHash").asText()).hasSize(64);
+        assertThat(imported.get("extractionMethod").asText()).isEqualTo("XLSX");
+        assertThat(imported.get("extractorVersion").asText()).isEqualTo("tabular-v1");
+        assertThat(imported.get("currency").asText()).isEqualTo("JPY");
+        assertThat(imported.get("lines")).hasSize(4);
+        assertThat(imported.at("/lines/0/reviewedName").asText()).isEqualTo("스테인리스 텀블러");
+        assertThat(imported.at("/lines/0/status").asText()).isEqualTo("PENDING");
+        assertThat(imported.at("/lines/2/unitPrice").isNull()).isTrue();
+        assertThat(imported.at("/lines/2/extractionErrors").asText()).contains("단가가 숫자가 아닙니다");
+        assertThat(imported.at("/lines/3/extractionErrors").asText()).contains("수량 단위가 없습니다");
+        assertThat(artifacts.count()).isEqualTo(artifactCount + 1);
+        assertThat(drafts.count()).isEqualTo(draftCount + 1);
+
+        JsonNode retried = body(call(multipart("/api/v1/supplier-offer-drafts/import").file(file)
+                        .param("supplierId", supplier.get("businessPartnerId").asText()).param("currency", "JPY"), owner, null)
+                .andExpect(status().isCreated()));
+        assertThat(retried.get("draftId").asText()).isEqualTo(imported.get("draftId").asText());
+        assertThat(artifacts.count()).isEqualTo(artifactCount + 1);
+        assertThat(drafts.count()).isEqualTo(draftCount + 1);
+
+        call(get("/api/v1/supplier-offer-drafts/" + imported.get("draftId").asText()), other, null)
+                .andExpect(status().isNotFound());
+        call(multipart("/api/v1/supplier-offer-drafts/import").file(file)
+                .param("supplierId", supplier.get("businessPartnerId").asText()).param("currency", "JPY"), viewer, null)
+                .andExpect(status().isForbidden());
     }
 
     @Test

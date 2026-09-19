@@ -17,7 +17,7 @@
 `React → Spring Boot → PostgreSQL`이다. Research Python 서버, Celery, Redis, 자동화·staging
 스키마는 퇴역 또는 조건부 설계이며 현재 구성 요소가 아니다. Flyway는 기본 PostgreSQL 스키마에
 V1(인증·조직·화물·협업), V2(Product·BusinessPartner·SupplierQuote), V3~V6(원가·발주·입고·판매),
-V7(수동 공급 제안 접수), V8(구매 품목 선택), V9(다품목 발주)을 순방향으로 설치한다.
+V7(수동 공급 제안 접수), V8(구매 품목 선택), V9(다품목 발주), V10(CSV/XLSX 제안 파일 수집)을 순방향으로 설치한다.
 
 이 문서 아래의 Worker, Redis, Outbox, 다중 논리 스키마 설명은 자동화가 실제로 다시 선택될 때의
 목표 계약이다. 현재 상태로 읽거나 테이블을 미리 만들 근거로 사용하지 않는다.
