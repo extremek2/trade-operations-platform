@@ -16,7 +16,10 @@ jest.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { role: "OW
 
 const scenario = {
   scenarioId: "scenario-1", scenarioName: "기준안", revisionNumber: 1, productName: "휴대용 선풍기",
-  calculationStatus: "COMPLETE", quoteStatus: "SELECTED",
+  quoteId: "quote-1", orderQuantity: 10, calculationStatus: "COMPLETE", quoteStatus: "SELECTED",
+};
+const secondScenario = {
+  ...scenario, scenarioId: "scenario-2", scenarioName: "파우치 기준안", productName: "보관 파우치", orderQuantity: 5,
 };
 const cycle = status => ({
   purchaseOrder: {
@@ -31,22 +34,23 @@ const cycle = status => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
-  getCostScenarios.mockResolvedValue([scenario]);
+  getCostScenarios.mockResolvedValue([scenario, secondScenario]);
   getShipments.mockResolvedValue([]);
   getTradeCycles.mockResolvedValue([cycle("DRAFT")]);
   createPurchaseOrder.mockResolvedValue(cycle("DRAFT"));
   approvePurchaseOrder.mockResolvedValue(cycle("APPROVED"));
 });
 
-test("완성 원가안으로 발주를 만들고 초안을 승인한다", async () => {
+test("같은 견적의 완성 원가안 여러 개로 발주를 만들고 초안을 승인한다", async () => {
   render(<TradeCyclePage navigate={jest.fn()}/>);
   expect(await screen.findByText("PO-001")).toBeInTheDocument();
 
   const createForm = screen.getByRole("form", { name: "발주 생성" });
-  fireEvent.change(within(createForm).getByLabelText("예상 원가안"), { target: { value: "scenario-1" } });
+  fireEvent.click(within(createForm).getByLabelText(/휴대용 선풍기 · 기준안/));
+  fireEvent.click(within(createForm).getByLabelText(/보관 파우치 · 파우치 기준안/));
   fireEvent.change(within(createForm).getByLabelText("발주번호"), { target: { value: "PO-002" } });
   fireEvent.click(within(createForm).getByRole("button", { name: "발주 초안 생성" }));
-  await waitFor(() => expect(createPurchaseOrder).toHaveBeenCalledWith({ costScenarioId: "scenario-1", orderNumber: "PO-002" }));
+  await waitFor(() => expect(createPurchaseOrder).toHaveBeenCalledWith({ costScenarioIds: ["scenario-1", "scenario-2"], orderNumber: "PO-002" }));
 
   const approveButton = screen.getByRole("button", { name: "발주 승인" });
   await waitFor(() => expect(approveButton).not.toBeDisabled());

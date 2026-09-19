@@ -13,7 +13,7 @@ public final class TradeCycleRequests {
     private TradeCycleRequests() {}
 
     public record CreatePurchaseOrder(
-            @NotNull UUID costScenarioId,
+            @NotEmpty List<@NotNull UUID> costScenarioIds,
             @NotBlank @Size(max = 100) String orderNumber,
             LocalDate orderedAt,
             @Size(max = 2000) String notes
@@ -61,6 +61,7 @@ public final class TradeCycleRequests {
             @Size(max = 2000) String notes
     ) {}
     public record AddDecision(
+            @NotNull UUID productId,
             @NotNull ReorderDecision.Decision decision,
             @NotBlank @Size(max = 2000) String reason
     ) {}

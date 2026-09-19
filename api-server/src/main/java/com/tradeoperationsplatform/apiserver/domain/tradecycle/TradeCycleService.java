@@ -40,22 +40,33 @@ public class TradeCycleService {
     public TradeCycleResponse createOrder(TradeCycleRequests.CreatePurchaseOrder request) {
         var actor = currentActor.require();
         Long organizationId = actor.organization().getId();
-        CostScenario scenario = scenarios.findByPublicIdAndOrganizationId(request.costScenarioId(), organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("예상 원가 시나리오를 찾을 수 없습니다."));
-        if (scenario.getQuote().getStatus() != SupplierQuote.Status.SELECTED) {
-            throw new BusinessException("선택 상태의 견적만 발주로 전환할 수 있습니다.");
+        if (new HashSet<>(request.costScenarioIds()).size() != request.costScenarioIds().size()) {
+            throw new BusinessException("같은 원가 시나리오를 발주에 중복 입력할 수 없습니다.");
         }
+        List<CostScenario> selectedScenarios = request.costScenarioIds().stream().map(scenarioId ->
+                scenarios.findByPublicIdAndOrganizationId(scenarioId, organizationId)
+                        .orElseThrow(() -> new ResourceNotFoundException("예상 원가 시나리오를 찾을 수 없습니다."))).toList();
+        selectedScenarios.forEach(scenario -> {
+            if (scenario.getQuote().getStatus() != SupplierQuote.Status.SELECTED) {
+                throw new BusinessException("선택 상태의 견적만 발주로 전환할 수 있습니다.");
+            }
+            if (orderLines.existsByCostScenarioId(scenario.getId())) {
+                throw new ConflictException("이미 발주에 연결된 원가 시나리오입니다.");
+            }
+        });
         if (orders.existsByOrganizationIdAndOrderNumber(organizationId, request.orderNumber().trim())) {
             throw new ConflictException("조직 내에서 이미 사용 중인 발주번호입니다.");
         }
-        SupplierQuoteLine quoteLine = scenario.getQuote().getLines().stream()
-                .filter(line -> line.getProduct().getId().equals(scenario.getProduct().getId()))
-                .findFirst().orElseThrow(() -> new BusinessException("원가 시나리오의 견적 품목을 찾을 수 없습니다."));
         try {
-            PurchaseOrder order = new PurchaseOrder(actor.organization(), actor.user(), scenario,
+            PurchaseOrder order = new PurchaseOrder(actor.organization(), actor.user(), selectedScenarios,
                     request.orderNumber(), request.orderedAt(), request.notes());
-            order.addLine(new PurchaseOrderLine(order, scenario.getProduct(), scenario.getOrderQuantity(),
-                    quoteLine.getQuantityUnit(), scenario.getQuotedUnitPrice()));
+            int lineNumber = 1;
+            for (CostScenario scenario : selectedScenarios) {
+                SupplierQuoteLine quoteLine = scenario.getQuote().getLines().stream()
+                        .filter(line -> line.getProduct().getId().equals(scenario.getProduct().getId()))
+                        .findFirst().orElseThrow(() -> new BusinessException("원가 시나리오의 견적 품목을 찾을 수 없습니다."));
+                order.addLine(new PurchaseOrderLine(order, scenario, lineNumber++, quoteLine.getQuantityUnit()));
+            }
             return response(orders.saveAndFlush(order));
         } catch (IllegalArgumentException e) {
             throw new BusinessException(e.getMessage());
@@ -249,9 +260,12 @@ public class TradeCycleService {
         if (sales.findAllByInventoryLotPurchaseOrderLinePurchaseOrderIdOrderByObservedAtAsc(order.getId()).isEmpty()) {
             throw new BusinessException("판매 결과를 한 건 이상 기록한 뒤 판단해 주세요.");
         }
+        var product = order.getLines().stream().map(PurchaseOrderLine::getProduct)
+                .filter(item -> item.getPublicId().equals(request.productId())).findFirst()
+                .orElseThrow(() -> new BusinessException("이 발주의 상품만 재발주 판단 대상으로 선택할 수 있습니다."));
         try {
             decisions.save(new ReorderDecision(actor.organization(), actor.user(), order,
-                    order.getLines().get(0).getProduct(), request.decision(), request.reason()));
+                    product, request.decision(), request.reason()));
             return response(order);
         } catch (IllegalArgumentException e) { throw new BusinessException(e.getMessage()); }
     }
@@ -287,11 +301,12 @@ public class TradeCycleService {
         }
         var orderView = new TradeCycleResponse.PurchaseOrderView(order.getPublicId(), order.getOrderNumber(), order.getStatus(),
                 order.getPaymentStatus(), order.getPaidAmount(), order.getPaidAt(), order.getPaymentEvidence(), order.getCurrency(),
-                order.getSupplier().getPublicId(), order.getSupplierNameSnapshot(), order.getCostScenario().getPublicId(),
-                order.getQuoteNumberSnapshot(), order.getQuoteRevisionSnapshot(), order.getExpectedTotalCostKrw(), order.getOrderedAt(),
+                order.getSupplier().getPublicId(), order.getSupplierNameSnapshot(), order.getQuoteNumberSnapshot(),
+                order.getQuoteRevisionSnapshot(), order.getExpectedTotalCostKrw(), order.getOrderedAt(),
                 order.getNotes(), order.getVersion(), order.getCreatedAt(), order.getLines().stream().map(line ->
-                new TradeCycleResponse.LineView(line.getPublicId(), line.getProduct().getPublicId(), line.getProductNameSnapshot(),
-                        line.getInternalSkuSnapshot(), line.getOrderedQuantity(), shippedByLine.get(line.getId()),
+                new TradeCycleResponse.LineView(line.getPublicId(), line.getCostScenario().getPublicId(),
+                        line.getProduct().getPublicId(), line.getProductNameSnapshot(), line.getInternalSkuSnapshot(),
+                        line.getOrderedQuantity(), shippedByLine.get(line.getId()),
                         receivedByLine.get(line.getId()), line.getQuantityUnit(), line.getUnitPrice())).toList());
         List<TradeCycleResponse.AllocationView> allocationViews = orderAllocations.stream().map(item ->
                 new TradeCycleResponse.AllocationView(item.getPublicId(), item.getShipment().getPublicId(),
@@ -316,7 +331,8 @@ public class TradeCycleService {
                         sale.getChannel(), sale.getObservedAt(), sale.getSoldQuantity(), sale.getReturnedQuantity(),
                         sale.getGrossRevenueKrw(), sale.getChannelCostKrw(), sale.getNotes())).toList();
         List<TradeCycleResponse.DecisionView> decisionViews = decisions.findAllByPurchaseOrderIdOrderByDecidedAtDesc(order.getId()).stream().map(decision ->
-                new TradeCycleResponse.DecisionView(decision.getPublicId(), decision.getDecision(), decision.getReason(), decision.getDecidedAt())).toList();
+                new TradeCycleResponse.DecisionView(decision.getPublicId(), decision.getProduct().getPublicId(),
+                        decision.getProduct().getName(), decision.getDecision(), decision.getReason(), decision.getDecidedAt())).toList();
         return new TradeCycleResponse(orderView, allocationViews, lotViews, costViews, closeView, salesViews, decisionViews);
     }
 

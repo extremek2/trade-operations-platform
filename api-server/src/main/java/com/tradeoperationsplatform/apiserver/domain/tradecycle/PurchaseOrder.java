@@ -28,7 +28,6 @@ public class PurchaseOrder {
     @Column(name = "public_id", nullable = false, unique = true, updatable = false) private UUID publicId;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "organization_id") private Organization organization;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "supplier_id") private BusinessPartner supplier;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "cost_scenario_id") private CostScenario costScenario;
     @Column(name = "order_number", nullable = false) private String orderNumber;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private Status status;
     @Enumerated(EnumType.STRING) @Column(name = "payment_status", nullable = false) private PaymentStatus paymentStatus;
@@ -51,25 +50,39 @@ public class PurchaseOrder {
     @OneToMany(mappedBy = "purchaseOrder", cascade = CascadeType.ALL, orphanRemoval = false)
     @OrderBy("lineNumber ASC") private List<PurchaseOrderLine> lines = new ArrayList<>();
 
-    public PurchaseOrder(Organization organization, AppUser creator, CostScenario scenario,
+    public PurchaseOrder(Organization organization, AppUser creator, List<CostScenario> scenarios,
                          String orderNumber, LocalDate orderedAt, String notes) {
-        if (scenario.getTotalLandedCostKrw() == null || scenario.getQuotedUnitPrice() == null) {
-            throw new IllegalArgumentException("완성된 예상 원가 시나리오만 발주로 전환할 수 있습니다.");
+        if (scenarios == null || scenarios.isEmpty()) throw new IllegalArgumentException("발주 품목은 한 개 이상이어야 합니다.");
+        CostScenario first = scenarios.get(0);
+        var productIds = new java.util.HashSet<Long>();
+        for (CostScenario scenario : scenarios) {
+            if (scenario.getTotalLandedCostKrw() == null || scenario.getQuotedUnitPrice() == null) {
+                throw new IllegalArgumentException("완성된 예상 원가 시나리오만 발주로 전환할 수 있습니다.");
+            }
+            if (!scenario.getOrganization().getId().equals(organization.getId())) {
+                throw new IllegalArgumentException("같은 조직의 원가 시나리오만 발주할 수 있습니다.");
+            }
+            if (!scenario.getQuote().getId().equals(first.getQuote().getId())) {
+                throw new IllegalArgumentException("같은 공급 견적의 품목만 하나의 발주로 묶을 수 있습니다.");
+            }
+            if (!productIds.add(scenario.getProduct().getId())) {
+                throw new IllegalArgumentException("한 발주에 같은 상품의 원가 시나리오를 중복 연결할 수 없습니다.");
+            }
         }
         this.publicId = UUID.randomUUID();
         this.organization = organization;
         this.createdBy = creator;
-        this.costScenario = scenario;
-        this.supplier = scenario.getQuote().getSupplier();
+        this.supplier = first.getQuote().getSupplier();
         this.orderNumber = required(orderNumber, "발주번호");
         this.status = Status.DRAFT;
         this.paymentStatus = PaymentStatus.UNPAID;
         this.paidAmount = BigDecimal.ZERO;
-        this.currency = scenario.getQuoteCurrency();
+        this.currency = first.getQuoteCurrency();
         this.supplierNameSnapshot = supplier.getName();
-        this.quoteNumberSnapshot = scenario.getQuote().getQuoteNumber();
-        this.quoteRevisionSnapshot = scenario.getQuoteRevisionNumber();
-        this.expectedTotalCostKrw = scenario.getTotalLandedCostKrw();
+        this.quoteNumberSnapshot = first.getQuote().getQuoteNumber();
+        this.quoteRevisionSnapshot = first.getQuoteRevisionNumber();
+        this.expectedTotalCostKrw = scenarios.stream().map(CostScenario::getTotalLandedCostKrw)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         this.orderedAt = orderedAt == null ? LocalDate.now() : orderedAt;
         this.notes = trimToNull(notes);
     }

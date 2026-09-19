@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface PurchaseOrderLineRepository extends JpaRepository<PurchaseOrderLine, Long> {
     @EntityGraph(attributePaths = {"purchaseOrder", "product"})
     Optional<PurchaseOrderLine> findByPublicIdAndPurchaseOrderOrganizationId(UUID publicId, Long organizationId);
+
+    boolean existsByCostScenarioId(Long costScenarioId);
 }

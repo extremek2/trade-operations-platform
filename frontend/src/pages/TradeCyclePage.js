@@ -21,12 +21,12 @@ const quantity = value => new Intl.NumberFormat("ko-KR", { maximumFractionDigits
 const toNumber = value => Number(value);
 
 const initial = {
-  scenarioId: "", orderNumber: "", notes: "", shipmentId: "", allocationQuantity: "",
+  scenarioIds: [], orderNumber: "", notes: "", shipmentId: "", purchaseOrderLineId: "", allocationQuantity: "",
   allocationId: "", receiptNumber: "", receiptQuantity: "", lotNumber: "",
   paymentStatus: "PAID", paidAmount: "", paidAt: "", paymentEvidence: "",
   costType: "PRODUCT", costDescription: "", amountKrw: "", evidenceReference: "",
   inventoryLotId: "", channel: "", soldQuantity: "", returnedQuantity: "0",
-  grossRevenueKrw: "", channelCostKrw: "0", decision: "WATCH", reason: "",
+  grossRevenueKrw: "", channelCostKrw: "0", decisionProductId: "", decision: "WATCH", reason: "",
 };
 
 export default function TradeCyclePage({ navigate }) {
@@ -47,7 +47,10 @@ export default function TradeCyclePage({ navigate }) {
       const [scenarioRows, shipmentRows, cycleRows] = await Promise.all([
         getCostScenarios(), getShipments(), getTradeCycles(),
       ]);
-      setScenarios(scenarioRows.filter(item => item.calculationStatus !== "INCOMPLETE" && item.quoteStatus === "SELECTED"));
+      const supersededScenarioIds = new Set(scenarioRows.map(item => item.previousScenarioId).filter(Boolean));
+      const orderedScenarioIds = new Set(cycleRows.flatMap(cycle => cycle.purchaseOrder.lines.map(line => line.costScenarioId)));
+      setScenarios(scenarioRows.filter(item => item.calculationStatus !== "INCOMPLETE" && item.quoteStatus === "SELECTED"
+        && !supersededScenarioIds.has(item.scenarioId) && !orderedScenarioIds.has(item.scenarioId)));
       setShipments(shipmentRows.filter(item => ["OPEN", "ON_HOLD"].includes(item.status)));
       setCycles(cycleRows);
       setActiveId(current => current || cycleRows[0]?.purchaseOrder.purchaseOrderId || "");
@@ -60,6 +63,9 @@ export default function TradeCyclePage({ navigate }) {
   const availableAllocations = useMemo(() => (active?.shipmentAllocations || []).filter(item =>
     Number(item.allocatedQuantity) > Number(item.receivedQuantity)), [active]);
   const availableLots = useMemo(() => (active?.inventoryLots || []).filter(item => Number(item.sellableQuantity) > 0), [active]);
+  const allocatableLines = useMemo(() => (active?.purchaseOrder.lines || []).filter(line =>
+    Number(line.shippedQuantity) < Number(line.orderedQuantity)), [active]);
+  const allocationLine = allocatableLines.find(line => line.purchaseOrderLineId === form.purchaseOrderLineId);
   const ordered = active?.purchaseOrder.lines.reduce((sum, line) => sum + Number(line.orderedQuantity), 0) || 0;
   const shipped = active?.purchaseOrder.lines.reduce((sum, line) => sum + Number(line.shippedQuantity), 0) || 0;
   const received = active?.purchaseOrder.lines.reduce((sum, line) => sum + Number(line.receivedQuantity), 0) || 0;
@@ -78,14 +84,21 @@ export default function TradeCyclePage({ navigate }) {
   };
   const submit = action => event => { event.preventDefault(); action(); };
 
+  const toggleScenario = scenario => setForm(current => ({
+    ...current,
+    scenarioIds: current.scenarioIds.includes(scenario.scenarioId)
+      ? current.scenarioIds.filter(id => id !== scenario.scenarioId)
+      : [...current.scenarioIds, scenario.scenarioId],
+  }));
+
   const createOrder = () => perform(() => createPurchaseOrder({
-    costScenarioId: form.scenarioId, orderNumber: form.orderNumber, ...(form.notes && { notes: form.notes }),
-  }), { scenarioId: "", orderNumber: "", notes: "" });
+    costScenarioIds: form.scenarioIds, orderNumber: form.orderNumber, ...(form.notes && { notes: form.notes }),
+  }), { scenarioIds: [], orderNumber: "", notes: "" });
   const allocate = () => perform(() => allocateShipment({
     shipmentId: form.shipmentId,
-    purchaseOrderLineId: active.purchaseOrder.lines[0].purchaseOrderLineId,
+    purchaseOrderLineId: form.purchaseOrderLineId,
     quantity: toNumber(form.allocationQuantity),
-  }), { shipmentId: "", allocationQuantity: "" });
+  }), { shipmentId: "", purchaseOrderLineId: "", allocationQuantity: "" });
   const receive = () => perform(() => createReceipt({
     shipmentId: active.shipmentAllocations.find(item => item.allocationId === form.allocationId).shipmentId,
     receiptNumber: form.receiptNumber,
@@ -110,11 +123,15 @@ export default function TradeCyclePage({ navigate }) {
         <div className="panel-header"><div><h2>예상 원가에서 발주 만들기</h2><p className="muted">공급 견적 화면에서 SELECTED로 확정한 완성 원가안만 발주할 수 있습니다.</p></div></div>
         {scenarios.length === 0 ? <EmptyState title="사용할 원가안이 없습니다." description="예상 원가 계산을 완료한 뒤 돌아오세요."/> :
           <form className="panel-body form-grid three" aria-label="발주 생성" onSubmit={submit(createOrder)}>
-            <label>예상 원가안<select required value={form.scenarioId} onChange={e => update("scenarioId", e.target.value)}><option value="">선택</option>
-              {scenarios.map(item => <option value={item.scenarioId} key={item.scenarioId}>{item.productName} · {item.scenarioName} R{item.revisionNumber}</option>)}</select></label>
+            <fieldset className="quote-line-editor"><legend>예상 원가안</legend>{scenarios.map(item => {
+              const selectedQuoteId = scenarios.find(row => form.scenarioIds.includes(row.scenarioId))?.quoteId;
+              const disabled = Boolean(selectedQuoteId && selectedQuoteId !== item.quoteId);
+              return <label key={item.scenarioId}><input type="checkbox" checked={form.scenarioIds.includes(item.scenarioId)}
+                disabled={disabled} onChange={() => toggleScenario(item)}/>{item.productName} · {item.scenarioName} R{item.revisionNumber} · {quantity(item.orderQuantity)}개</label>;
+            })}</fieldset>
             <label>발주번호<input required maxLength="100" value={form.orderNumber} onChange={e => update("orderNumber", e.target.value)}/></label>
             <label>메모<input maxLength="2000" value={form.notes} onChange={e => update("notes", e.target.value)}/></label>
-            <div className="form-actions cycle-submit"><button disabled={saving} className="button primary">발주 초안 생성</button></div>
+            <div className="form-actions cycle-submit"><button disabled={saving || form.scenarioIds.length === 0} className="button primary">발주 초안 생성</button></div>
           </form>}
       </section>}
 
@@ -138,17 +155,18 @@ export default function TradeCyclePage({ navigate }) {
             <label>결제일<input required={form.paymentStatus !== "UNPAID"} type="date" value={form.paidAt} onChange={e => update("paidAt", e.target.value)}/></label>
             <label>증빙 참조<input value={form.paymentEvidence} onChange={e => update("paymentEvidence", e.target.value)}/></label><button disabled={saving} className="button secondary">기록</button>
           </form>
-          {shipped < ordered && <form className="panel panel-body form-stack" aria-label="선적 배정" onSubmit={submit(allocate)}>
+          {allocatableLines.length > 0 && <form className="panel panel-body form-stack" aria-label="선적 배정" onSubmit={submit(allocate)}>
             <h2>2. 선적 배정</h2>{shipments.length === 0 ? <><p className="muted">배정할 진행 화물이 없습니다.</p><button type="button" className="button ghost" onClick={() => navigate("/shipments/new")}>화물 먼저 등록</button></> : <>
               <label>화물<select required value={form.shipmentId} onChange={e => update("shipmentId", e.target.value)}><option value="">선택</option>{shipments.map(item => <option value={item.shipmentId} key={item.shipmentId}>{item.caseNumber}</option>)}</select></label>
-              <label>배정수량<input required type="number" min="0.000001" max={ordered - shipped} step="any" value={form.allocationQuantity} onChange={e => update("allocationQuantity", e.target.value)}/></label>
+              <label>발주 품목<select required value={form.purchaseOrderLineId} onChange={e => update("purchaseOrderLineId", e.target.value)}><option value="">선택</option>{allocatableLines.map(line => <option value={line.purchaseOrderLineId} key={line.purchaseOrderLineId}>{line.productName} · 잔여 {quantity(Number(line.orderedQuantity) - Number(line.shippedQuantity))} {line.quantityUnit}</option>)}</select></label>
+              <label>배정수량<input required type="number" min="0.000001" max={allocationLine ? Number(allocationLine.orderedQuantity) - Number(allocationLine.shippedQuantity) : undefined} step="any" value={form.allocationQuantity} onChange={e => update("allocationQuantity", e.target.value)}/></label>
               <button disabled={saving} className="button secondary">선적에 배정</button></>}
           </form>}
         </section>}
 
         {editable && availableAllocations.length > 0 && <form className="panel panel-body cycle-receipt form-grid four" aria-label="입고 처리" onSubmit={submit(receive)}>
           <div className="cycle-form-heading"><h2>3. 입고와 재고 로트</h2><p className="muted">부분 입고도 가능하며 입력 건마다 판매 가능한 재고 로트가 생깁니다.</p></div>
-          <label>선적 배정<select required value={form.allocationId} onChange={e => update("allocationId", e.target.value)}><option value="">선택</option>{availableAllocations.map(item => <option value={item.allocationId} key={item.allocationId}>{item.shipmentCaseNumber} · 잔여 {quantity(Number(item.allocatedQuantity) - Number(item.receivedQuantity))}</option>)}</select></label>
+          <label>선적 배정<select required value={form.allocationId} onChange={e => update("allocationId", e.target.value)}><option value="">선택</option>{availableAllocations.map(item => <option value={item.allocationId} key={item.allocationId}>{active.purchaseOrder.lines.find(line => line.purchaseOrderLineId === item.purchaseOrderLineId)?.productName} · {item.shipmentCaseNumber} · 잔여 {quantity(Number(item.allocatedQuantity) - Number(item.receivedQuantity))}</option>)}</select></label>
           <label>입고번호<input required value={form.receiptNumber} onChange={e => update("receiptNumber", e.target.value)}/></label>
           <label>입고수량<input required type="number" min="0.000001" step="any" value={form.receiptQuantity} onChange={e => update("receiptQuantity", e.target.value)}/></label>
           <label>로트번호<input required value={form.lotNumber} onChange={e => update("lotNumber", e.target.value)}/></label>
@@ -176,8 +194,9 @@ export default function TradeCyclePage({ navigate }) {
             <button disabled={saving || availableLots.length === 0} className="button secondary">판매 관측 추가</button>
           </form>
           <form className="panel panel-body form-stack" aria-label="재발주 판단" onSubmit={submit(() => perform(() => addReorderDecision(active.purchaseOrder.purchaseOrderId, {
-            decision: form.decision, reason: form.reason,
+            productId: form.decisionProductId, decision: form.decision, reason: form.reason,
           }), { reason: "" }))}><h2>6. 재발주 판단</h2>
+            <label>판단 상품<select required value={form.decisionProductId} onChange={e => update("decisionProductId", e.target.value)}><option value="">선택</option>{active.purchaseOrder.lines.map(line => <option value={line.productId} key={line.productId}>{line.productName}</option>)}</select></label>
             <label>판단<select value={form.decision} onChange={e => update("decision", e.target.value)}><option value="REORDER">재발주</option><option value="WATCH">관찰</option><option value="STOP">중단</option></select></label>
             <label>근거<textarea required value={form.reason} onChange={e => update("reason", e.target.value)}/></label>
             <button disabled={saving || active.salesObservations.length === 0} className="button primary">판단 기록</button>
@@ -190,13 +209,15 @@ export default function TradeCyclePage({ navigate }) {
 
 function CycleSummary({ cycle, ordered, shipped, received }) {
   const order = cycle.purchaseOrder;
+  const title = order.lines.length > 1 ? `${order.lines[0]?.productName} 외 ${order.lines.length - 1}품목` : order.lines[0]?.productName;
   return <section className="panel cycle-summary">
-    <div className="panel-header"><div><span className="eyebrow">{order.orderNumber}</span><div className="title-row"><h2>{order.lines[0]?.productName}</h2><StatusBadge value={order.status}/></div><p className="muted">{order.supplierName} · {order.currency} {order.lines[0]?.unitPrice} · 예상 {money(order.expectedTotalCostKrw)}</p></div><div><StatusBadge value={order.paymentStatus}/><small className="cycle-status-label">{statusLabels[order.status]}</small></div></div>
+    <div className="panel-header"><div><span className="eyebrow">{order.orderNumber}</span><div className="title-row"><h2>{title}</h2><StatusBadge value={order.status}/></div><p className="muted">{order.supplierName} · {order.lines.length}개 발주 품목 · 예상 {money(order.expectedTotalCostKrw)}</p></div><div><StatusBadge value={order.paymentStatus}/><small className="cycle-status-label">{statusLabels[order.status]}</small></div></div>
+    <ul>{order.lines.map(line => <li key={line.purchaseOrderLineId}>{line.productName} · {quantity(line.orderedQuantity)} {line.quantityUnit} · {order.currency} {quantity(line.unitPrice)}</li>)}</ul>
     <div className="cycle-progress"><div><span>발주</span><strong>{quantity(ordered)}</strong></div><div><span>선적</span><strong>{quantity(shipped)}</strong></div><div><span>입고</span><strong>{quantity(received)}</strong></div><div><span>판매가능</span><strong>{quantity(cycle.inventoryLots.reduce((sum, lot) => sum + Number(lot.sellableQuantity), 0))}</strong></div></div>
     <div className="cycle-ledger">
       <section><h3>실제 원가</h3>{cycle.costClose ? <><strong>{money(cycle.costClose.actualTotalKrw)}</strong><small>예상 대비 {money(cycle.costClose.varianceKrw)} · 단위 {money(cycle.costClose.actualUnitCostKrw)}</small></> : <span>미마감 · 비용 {cycle.actualCosts.length}건</span>}</section>
       <section><h3>판매 관측</h3><strong>{cycle.salesObservations.length}건</strong><small>총매출 {money(cycle.salesObservations.reduce((sum, item) => sum + Number(item.grossRevenueKrw), 0))}</small></section>
-      <section><h3>최근 판단</h3>{cycle.decisions[0] ? <><StatusBadge value={cycle.decisions[0].decision}/><small>{cycle.decisions[0].reason}</small></> : <span>아직 판단 없음</span>}</section>
+      <section><h3>최근 판단</h3>{cycle.decisions[0] ? <><StatusBadge value={cycle.decisions[0].decision}/><small>{cycle.decisions[0].productName} · {cycle.decisions[0].reason}</small></> : <span>아직 판단 없음</span>}</section>
     </div>
   </section>;
 }

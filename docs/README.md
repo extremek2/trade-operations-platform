@@ -52,7 +52,7 @@
 |---|---|
 | [ADR-0001: Core와 Automation 소유권 분리](architecture/ADR-0001-p0-service-and-data-ownership.md) | 승인, 공동 DB 경로 제거 완료 |
 | [ADR-0002: 코어 도메인과 빈 DB 기준선](architecture/ADR-0002-core-domain-and-clean-baseline.md) | 승인, 개발 기준선 적용 완료 |
-| [코어 도메인 실행 계획](architecture/P0_EXECUTION_PLAN.md) | P0~P5 첫 수직 사이클 완료, P6 제안 접수·구매 선택·견적/원가 인계 구현 |
+| [코어 도메인 실행 계획](architecture/P0_EXECUTION_PLAN.md) | P0~P5 첫 수직 사이클 완료, P6 제안 접수부터 다품목 발주·입고·원가 연결 구현 |
 
 ## 구현·검증 기록
 
@@ -60,6 +60,7 @@
 
 [P6 첫 단계](engineering/supplier-offer-stage-1.md)는 수동 공급 제안 접수와 행별 추출 확인의 구현 기록이다.
 [P6 두 번째 단계](engineering/supplier-offer-stage-2.md)는 일부 품목 구매 선택과 기존 견적·예상 원가 인계의 구현 기록이다.
+[P6 세 번째 단계](engineering/supplier-offer-stage-3.md)는 같은 견적의 여러 원가안을 한 발주로 묶고 품목별 선적·입고·원가까지 연결한 구현 기록이다.
 
 - [1단계: 시스템 권한과 인증 세션](engineering/identity-stage-1.md)
 - [2단계: 조직 개설 신청 백엔드](engineering/identity-stage-2.md)

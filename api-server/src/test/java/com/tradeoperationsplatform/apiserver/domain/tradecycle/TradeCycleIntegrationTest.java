@@ -55,7 +55,7 @@ class TradeCycleIntegrationTest extends PostgresTestSupport {
     void selectedScenarioFlowsThroughPartialShipmentReceiptCostSalesAndDecision() throws Exception {
         JsonNode scenario = selectedScenario(ownerToken);
         JsonNode cycle = body(call(post("/api/v1/trade-cycles/purchase-orders"), ownerToken, Map.of(
-                "costScenarioId", scenario.get("scenarioId").asText(), "orderNumber", "PO-" + UUID.randomUUID()))
+                "costScenarioIds", List.of(scenario.get("scenarioId").asText()), "orderNumber", "PO-" + UUID.randomUUID()))
                 .andExpect(status().isCreated()));
         String orderId = cycle.at("/purchaseOrder/purchaseOrderId").asText();
         String lineId = cycle.at("/purchaseOrder/lines/0/purchaseOrderLineId").asText();
@@ -105,12 +105,13 @@ class TradeCycleIntegrationTest extends PostgresTestSupport {
         assertThat(allocated).isEqualByComparingTo("120000.01");
 
         String lotId = closed.at("/inventoryLots/0/inventoryLotId").asText();
+        String productId = closed.at("/purchaseOrder/lines/0/productId").asText();
         JsonNode sold = body(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/sales"), ownerToken, Map.of(
                 "inventoryLotId", lotId, "channel", "SMARTSTORE", "soldQuantity", 2, "returnedQuantity", 0,
                 "grossRevenueKrw", 50000, "channelCostKrw", 5000)).andExpect(status().isCreated()));
         assertThat(sold.at("/inventoryLots/0/sellableQuantity").decimalValue()).isEqualByComparingTo("2");
         JsonNode decided = body(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/decisions"), ownerToken,
-                Map.of("decision", "REORDER", "reason", "실제 원가와 초기 판매 반응이 목표 범위입니다."))
+                Map.of("productId", productId, "decision", "REORDER", "reason", "실제 원가와 초기 판매 반응이 목표 범위입니다."))
                 .andExpect(status().isCreated()));
         assertThat(decided.at("/decisions/0/decision").asText()).isEqualTo("REORDER");
 
@@ -121,12 +122,12 @@ class TradeCycleIntegrationTest extends PostgresTestSupport {
     void boundariesRejectUnselectedScenarioOverAllocationAndStaleVersion() throws Exception {
         JsonNode scenario = scenario(ownerToken, false);
         call(post("/api/v1/trade-cycles/purchase-orders"), ownerToken, Map.of(
-                "costScenarioId", scenario.get("scenarioId").asText(), "orderNumber", "PO-UNSELECTED-" + UUID.randomUUID()))
+                "costScenarioIds", List.of(scenario.get("scenarioId").asText()), "orderNumber", "PO-UNSELECTED-" + UUID.randomUUID()))
                 .andExpect(status().isBadRequest());
 
         JsonNode selected = selectedScenario(ownerToken);
         JsonNode cycle = body(call(post("/api/v1/trade-cycles/purchase-orders"), ownerToken, Map.of(
-                "costScenarioId", selected.get("scenarioId").asText(), "orderNumber", "PO-BOUNDARY-" + UUID.randomUUID()))
+                "costScenarioIds", List.of(selected.get("scenarioId").asText()), "orderNumber", "PO-BOUNDARY-" + UUID.randomUUID()))
                 .andExpect(status().isCreated()));
         String orderId = cycle.at("/purchaseOrder/purchaseOrderId").asText();
         String lineId = cycle.at("/purchaseOrder/lines/0/purchaseOrderLineId").asText();
@@ -138,6 +139,62 @@ class TradeCycleIntegrationTest extends PostgresTestSupport {
         call(post("/api/v1/trade-cycles/shipment-allocations"), ownerToken, Map.of(
                 "shipmentId", shipment.get("shipmentId").asText(), "purchaseOrderLineId", lineId, "quantity", 11))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void selectedScenariosFromOneQuoteCreateMultiItemOrderAndCannotBeReused() throws Exception {
+        List<JsonNode> selected = selectedScenarios(ownerToken);
+        List<String> scenarioIds = selected.stream().map(item -> item.get("scenarioId").asText()).toList();
+        JsonNode cycle = body(call(post("/api/v1/trade-cycles/purchase-orders"), ownerToken, Map.of(
+                "costScenarioIds", scenarioIds, "orderNumber", "PO-MULTI-" + UUID.randomUUID()))
+                .andExpect(status().isCreated()));
+
+        assertThat(cycle.at("/purchaseOrder/lines")).hasSize(2);
+        assertThat(cycle.at("/purchaseOrder/lines/0/costScenarioId").asText()).isEqualTo(scenarioIds.get(0));
+        assertThat(cycle.at("/purchaseOrder/lines/1/costScenarioId").asText()).isEqualTo(scenarioIds.get(1));
+        assertThat(cycle.at("/purchaseOrder/lines/0/orderedQuantity").decimalValue()).isEqualByComparingTo("10");
+        assertThat(cycle.at("/purchaseOrder/lines/1/orderedQuantity").decimalValue()).isEqualByComparingTo("5");
+        assertThat(cycle.at("/purchaseOrder/expectedTotalCostKrw").decimalValue()).isEqualByComparingTo("215000");
+
+        String orderId = cycle.at("/purchaseOrder/purchaseOrderId").asText();
+        String firstLineId = cycle.at("/purchaseOrder/lines/0/purchaseOrderLineId").asText();
+        String secondLineId = cycle.at("/purchaseOrder/lines/1/purchaseOrderLineId").asText();
+        body(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/approve"), ownerToken,
+                Map.of("version", 0)).andExpect(status().isOk()));
+        JsonNode shipment = shipment(ownerToken, "MULTI-");
+        JsonNode partiallyShipped = body(call(post("/api/v1/trade-cycles/shipment-allocations"), ownerToken, Map.of(
+                "shipmentId", shipment.get("shipmentId").asText(), "purchaseOrderLineId", firstLineId, "quantity", 10))
+                .andExpect(status().isCreated()));
+        assertThat(partiallyShipped.at("/purchaseOrder/status").asText()).isEqualTo("PARTIALLY_SHIPPED");
+        JsonNode shipped = body(call(post("/api/v1/trade-cycles/shipment-allocations"), ownerToken, Map.of(
+                "shipmentId", shipment.get("shipmentId").asText(), "purchaseOrderLineId", secondLineId, "quantity", 5))
+                .andExpect(status().isCreated()));
+        assertThat(shipped.at("/purchaseOrder/status").asText()).isEqualTo("SHIPPED");
+        String firstAllocationId = shipped.at("/shipmentAllocations/0/allocationId").asText();
+        String secondAllocationId = shipped.at("/shipmentAllocations/1/allocationId").asText();
+        JsonNode completed = body(call(post("/api/v1/trade-cycles/receipts"), ownerToken, Map.of(
+                "shipmentId", shipment.get("shipmentId").asText(), "receiptNumber", "RCV-MULTI-" + UUID.randomUUID(),
+                "lines", List.of(
+                        Map.of("allocationId", firstAllocationId, "quantity", 10, "lotNumber", "LOT-MULTI-A-" + UUID.randomUUID()),
+                        Map.of("allocationId", secondAllocationId, "quantity", 5, "lotNumber", "LOT-MULTI-B-" + UUID.randomUUID()))))
+                .andExpect(status().isCreated()));
+        assertThat(completed.at("/purchaseOrder/status").asText()).isEqualTo("COMPLETED");
+        body(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/actual-costs"), ownerToken,
+                Map.of("costType", "PRODUCT", "description", "다품목 실제 상품대", "amountKrw", 200000))
+                .andExpect(status().isCreated()));
+        JsonNode closed = body(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/cost-close"), ownerToken, null)
+                .andExpect(status().isOk()));
+        assertThat(closed.at("/costClose/allocations").size()).isEqualTo(2);
+
+        call(post("/api/v1/trade-cycles/purchase-orders"), ownerToken, Map.of(
+                "costScenarioIds", List.of(scenarioIds.get(0)), "orderNumber", "PO-REUSE-" + UUID.randomUUID()))
+                .andExpect(status().isConflict());
+
+        JsonNode firstQuote = selectedScenario(ownerToken);
+        JsonNode secondQuote = selectedScenario(ownerToken);
+        call(post("/api/v1/trade-cycles/purchase-orders"), ownerToken, Map.of(
+                "costScenarioIds", List.of(firstQuote.get("scenarioId").asText(), secondQuote.get("scenarioId").asText()),
+                "orderNumber", "PO-MIXED-" + UUID.randomUUID())).andExpect(status().isBadRequest());
     }
 
     private JsonNode receive(String token, String shipmentId, String allocationId, int quantity, String lotPrefix) throws Exception {
@@ -154,6 +211,42 @@ class TradeCycleIntegrationTest extends PostgresTestSupport {
     }
 
     private JsonNode selectedScenario(String token) throws Exception { return scenario(token, true); }
+
+    private List<JsonNode> selectedScenarios(String token) throws Exception {
+        JsonNode first = body(call(post("/api/v1/products"), token,
+                Map.of("name", "다품목 상품 A " + UUID.randomUUID(), "hypothesis", "다품목 검증"))
+                .andExpect(status().isCreated()));
+        JsonNode second = body(call(post("/api/v1/products"), token,
+                Map.of("name", "다품목 상품 B " + UUID.randomUUID(), "hypothesis", "다품목 검증"))
+                .andExpect(status().isCreated()));
+        for (JsonNode product : List.of(first, second)) {
+            body(call(post("/api/v1/products/" + product.get("productId").asText() + "/status"), token,
+                    Map.of("status", "SOURCING", "reason", "다품목 견적 요청", "version", 0)).andExpect(status().isOk()));
+        }
+        JsonNode supplier = body(call(post("/api/v1/organizations/current/partners"), token,
+                Map.of("name", "다품목 공급사 " + UUID.randomUUID(), "roles", List.of("SUPPLIER")))
+                .andExpect(status().isCreated()));
+        JsonNode quote = body(call(post("/api/v1/quotes"), token, Map.of(
+                "supplierId", supplier.get("businessPartnerId").asText(), "quoteNumber", "Q-MULTI-" + UUID.randomUUID(),
+                "currency", "KRW", "lines", List.of(
+                        Map.of("productId", first.get("productId").asText(), "description", "다품목 A",
+                                "minimumQuantity", 10, "quantityUnit", "EA", "unitPrice", 10000),
+                        Map.of("productId", second.get("productId").asText(), "description", "다품목 B",
+                                "minimumQuantity", 5, "quantityUnit", "EA", "unitPrice", 20000))))
+                .andExpect(status().isCreated()));
+        String quoteId = quote.get("quoteId").asText();
+        body(call(post("/api/v1/quotes/" + quoteId + "/status"), token,
+                Map.of("status", "RECEIVED", "version", 0)).andExpect(status().isOk()));
+        JsonNode firstScenario = body(call(post("/api/v1/cost-scenarios"), token,
+                completeScenarioRequest(quoteId, first.get("productId").asText(), "다품목 A 기준안", 10, 10000))
+                .andExpect(status().isCreated()));
+        JsonNode secondScenario = body(call(post("/api/v1/cost-scenarios"), token,
+                completeScenarioRequest(quoteId, second.get("productId").asText(), "다품목 B 기준안", 5, 5000))
+                .andExpect(status().isCreated()));
+        body(call(post("/api/v1/quotes/" + quoteId + "/status"), token,
+                Map.of("status", "SELECTED", "version", 1)).andExpect(status().isOk()));
+        return List.of(firstScenario, secondScenario);
+    }
 
     private JsonNode scenario(String token, boolean select) throws Exception {
         JsonNode product = body(call(post("/api/v1/products"), token,
@@ -173,11 +266,20 @@ class TradeCycleIntegrationTest extends PostgresTestSupport {
         String quoteId = quote.get("quoteId").asText();
         body(call(post("/api/v1/quotes/" + quoteId + "/status"), token,
                 Map.of("status", "RECEIVED", "version", 0)).andExpect(status().isOk()));
+        Map<String, Object> scenarioRequest = completeScenarioRequest(quoteId, productId, "발주 기준안", 10, 10000);
+        JsonNode scenario = body(call(post("/api/v1/cost-scenarios"), token, scenarioRequest).andExpect(status().isCreated()));
+        if (select) body(call(post("/api/v1/quotes/" + quoteId + "/status"), token,
+                Map.of("status", "SELECTED", "version", 1)).andExpect(status().isOk()));
+        return scenario;
+    }
+
+    private Map<String, Object> completeScenarioRequest(String quoteId, String productId, String name,
+                                                        int quantity, int freightKrw) {
         Map<String, Object> scenarioRequest = new LinkedHashMap<>();
         scenarioRequest.put("quoteId", quoteId); scenarioRequest.put("productId", productId);
-        scenarioRequest.put("scenarioName", "발주 기준안"); scenarioRequest.put("orderQuantity", 10);
+        scenarioRequest.put("scenarioName", name); scenarioRequest.put("orderQuantity", quantity);
         scenarioRequest.put("excludedQuantity", 0); scenarioRequest.put("exchangeRate", 1);
-        scenarioRequest.put("exchangeRateSource", "USER_ASSUMPTION"); scenarioRequest.put("taxableFreightKrw", 10000);
+        scenarioRequest.put("exchangeRateSource", "USER_ASSUMPTION"); scenarioRequest.put("taxableFreightKrw", freightKrw);
         scenarioRequest.put("customsClearanceCostKrw", 0); scenarioRequest.put("inspectionCostKrw", 0);
         scenarioRequest.put("warehouseCostKrw", 0); scenarioRequest.put("domesticDeliveryCostKrw", 0);
         scenarioRequest.put("otherCostKrw", 0);
@@ -186,10 +288,7 @@ class TradeCycleIntegrationTest extends PostgresTestSupport {
         scenarioRequest.put("vatTreatment", "RECOVERABLE_EXCLUDED"); scenarioRequest.put("targetSellingPriceKrw", 25000);
         scenarioRequest.put("sellingFeeRate", 10); scenarioRequest.put("variableCostPerUnitKrw", 1000);
         scenarioRequest.put("salesAssumptionSource", "USER_ASSUMPTION");
-        JsonNode scenario = body(call(post("/api/v1/cost-scenarios"), token, scenarioRequest).andExpect(status().isCreated()));
-        if (select) body(call(post("/api/v1/quotes/" + quoteId + "/status"), token,
-                Map.of("status", "SELECTED", "version", 1)).andExpect(status().isOk()));
-        return scenario;
+        return scenarioRequest;
     }
 
     private String createMember(String organizationName, OrganizationMember.Role role) {

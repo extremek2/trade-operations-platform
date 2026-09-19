@@ -19,12 +19,12 @@ public record TradeCycleResponse(
             UUID purchaseOrderId, String orderNumber, PurchaseOrder.Status status,
             PurchaseOrder.PaymentStatus paymentStatus, BigDecimal paidAmount, LocalDate paidAt,
             String paymentEvidence, String currency, UUID supplierId, String supplierName,
-            UUID costScenarioId, String quoteNumberSnapshot, int quoteRevisionSnapshot,
+            String quoteNumberSnapshot, int quoteRevisionSnapshot,
             BigDecimal expectedTotalCostKrw, LocalDate orderedAt, String notes, long version,
             LocalDateTime createdAt, List<LineView> lines
     ) {}
     public record LineView(
-            UUID purchaseOrderLineId, UUID productId, String productName, String internalSku,
+            UUID purchaseOrderLineId, UUID costScenarioId, UUID productId, String productName, String internalSku,
             BigDecimal orderedQuantity, BigDecimal shippedQuantity, BigDecimal receivedQuantity,
             String quantityUnit, BigDecimal unitPrice
     ) {}
@@ -53,6 +53,7 @@ public record TradeCycleResponse(
             BigDecimal grossRevenueKrw, BigDecimal channelCostKrw, String notes
     ) {}
     public record DecisionView(
-            UUID decisionId, ReorderDecision.Decision decision, String reason, LocalDateTime decidedAt
+            UUID decisionId, UUID productId, String productName,
+            ReorderDecision.Decision decision, String reason, LocalDateTime decidedAt
     ) {}
 }
