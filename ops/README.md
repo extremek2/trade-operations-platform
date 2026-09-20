@@ -1,6 +1,6 @@
 # 운영 실행서
 
-이 문서는 V1/V2 빈 DB 기준선과 V3~V10 순방향 업무 migration의 운영 절차다. 실제 운영 DB·관리자 생성·메일 발송·서비스
+이 문서는 V1/V2 빈 DB 기준선과 V3~V11 순방향 업무 migration의 운영 절차다. 실제 운영 DB·관리자 생성·메일 발송·서비스
 공개는 대상과 결과를 확인한 뒤 별도 승인받아 실행한다.
 
 ## 1. 현재 배포 범위
@@ -16,7 +16,8 @@
 - Flyway V8: 구매 품목 선택·상품 및 견적 연결
 - Flyway V9: 발주 행별 원가 시나리오 연결과 다품목 발주
 - Flyway V10: 공급 제안 CSV/XLSX 원본 보존과 행별 추출 오류
-- Research Python, AI Worker, Celery, Redis는 포함하지 않는다.
+- Flyway V11: PDF/이미지 객체 저장 위치와 OCR 추출 상태·검토 필요 기록
+- 개발용 MinIO와 OCR worker는 선택적 `documents` 프로필에만 포함한다. Celery, Redis는 포함하지 않는다.
 - 기존 V01~V18 DB를 V1/V2로 직접 올리는 migration 경로는 제공하지 않는다.
 
 현재 프로젝트 DB는 보존 데이터가 없는 개발 볼륨을 삭제하고 새 기준선으로 시작한다. 데이터가 있는

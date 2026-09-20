@@ -62,6 +62,7 @@
 [P6 두 번째 단계](engineering/supplier-offer-stage-2.md)는 일부 품목 구매 선택과 기존 견적·예상 원가 인계의 구현 기록이다.
 [P6 세 번째 단계](engineering/supplier-offer-stage-3.md)는 같은 견적의 여러 원가안을 한 발주로 묶고 품목별 선적·입고·원가까지 연결한 구현 기록이다.
 [P6 네 번째 단계](engineering/supplier-offer-stage-4.md)는 합성 CSV/XLSX로 검증한 원본 파일 보존·결정론적 파싱·멱등 재업로드의 구현 기록이다.
+[P6 다섯 번째 단계](engineering/supplier-document-stage-5.md)는 S3 호환 원본 보관, 텍스트 PDF 우선 추출, 스캔 OCR·안티블러와 실패 경계의 구현 기록이다.
 
 - [1단계: 시스템 권한과 인증 세션](engineering/identity-stage-1.md)
 - [2단계: 조직 개설 신청 백엔드](engineering/identity-stage-2.md)

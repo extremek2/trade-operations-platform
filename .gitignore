@@ -36,6 +36,7 @@ venv.bak/
 /ops/backups/
 /ops/tls/
 /outputs/
+/tmp/
 .flaskenv
 
 ### VS Code / IDE ###

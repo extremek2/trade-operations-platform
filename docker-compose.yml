@@ -21,6 +21,41 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:
+    profiles: ["documents"]
+    build:
+      context: ./ops/minio
+      dockerfile: Dockerfile
+    container_name: trade_ops_minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-tradeops-dev}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-tradeops-dev-secret}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  ocr-worker:
+    profiles: ["documents"]
+    build:
+      context: ./ocr-worker
+      dockerfile: Dockerfile
+    container_name: trade_ops_ocr
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      OCR_LANGUAGES: ${OCR_LANGUAGES:-kor+eng+jpn}
+      OCR_PROCESS_TIMEOUT_SECONDS: ${OCR_PROCESS_TIMEOUT_SECONDS:-90}
+      OPENCV_IO_MAX_IMAGE_PIXELS: ${OCR_MAX_IMAGE_PIXELS:-40000000}
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1536M
+
   # ──────────────────────────────────────────
   # API Server (Spring Boot)
   # ──────────────────────────────────────────
@@ -41,6 +76,14 @@ services:
       SPRING_DATASOURCE_PASSWORD: product_pass
       JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-me-1234567890}
       AUTH_SECURE_COOKIE: ${AUTH_SECURE_COOKIE:-false}
+      OBJECT_STORAGE_ENABLED: ${OBJECT_STORAGE_ENABLED:-false}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://minio:9000}
+      OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-tradeops-dev}
+      OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-tradeops-dev-secret}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-trade-ops-documents}
+      OBJECT_STORAGE_CREATE_BUCKET: ${OBJECT_STORAGE_CREATE_BUCKET:-true}
+      OCR_ENABLED: ${OCR_ENABLED:-false}
+      OCR_BASE_URL: ${OCR_BASE_URL:-http://ocr-worker:8090}
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health/readiness"]
       interval: 5s
@@ -71,3 +114,4 @@ services:
 
 volumes:
   postgres_data:
+  minio_data:

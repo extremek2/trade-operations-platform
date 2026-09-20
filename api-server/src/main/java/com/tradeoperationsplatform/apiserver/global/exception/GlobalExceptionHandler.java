@@ -82,7 +82,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiResponse<Void>> handleOversizedUpload(Exception e) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
-                .body(ApiResponse.fail("업로드 파일은 2MB 이하여야 합니다."));
+                .body(ApiResponse.fail("업로드 파일은 15MB 이하여야 합니다."));
     }
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception e) {

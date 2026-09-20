@@ -1,8 +1,8 @@
 spring:
   servlet:
     multipart:
-      max-file-size: 2MB
-      max-request-size: 3MB
+      max-file-size: 15MB
+      max-request-size: 16MB
   mail:
     properties:
       mail.smtp.connectiontimeout: 5000
@@ -41,6 +41,20 @@ server:
   port: 8080
 
 app:
+  object-storage:
+    enabled: ${OBJECT_STORAGE_ENABLED:false}
+    endpoint: ${OBJECT_STORAGE_ENDPOINT:http://localhost:9000}
+    region: ${OBJECT_STORAGE_REGION:us-east-1}
+    access-key: ${OBJECT_STORAGE_ACCESS_KEY:}
+    secret-key: ${OBJECT_STORAGE_SECRET_KEY:}
+    bucket: ${OBJECT_STORAGE_BUCKET:trade-ops-documents}
+    path-style: ${OBJECT_STORAGE_PATH_STYLE:true}
+    create-bucket: ${OBJECT_STORAGE_CREATE_BUCKET:false}
+  ocr:
+    enabled: ${OCR_ENABLED:false}
+    base-url: ${OCR_BASE_URL:http://localhost:8090}
+    connect-timeout-seconds: ${OCR_CONNECT_TIMEOUT_SECONDS:3}
+    request-timeout-seconds: ${OCR_REQUEST_TIMEOUT_SECONDS:180}
   mail:
     dispatch-enabled: ${MAIL_DISPATCH_ENABLED:false}
     outbox-key: ${MAIL_OUTBOX_KEY:}
