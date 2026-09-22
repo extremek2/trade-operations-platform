@@ -59,7 +59,7 @@ public class TradeCycleService {
         }
         try {
             PurchaseOrder order = new PurchaseOrder(actor.organization(), actor.user(), selectedScenarios,
-                    request.orderNumber(), request.orderedAt(), request.notes());
+                    request.orderNumber(), request.orderedAt(), request.notes(), request.procurementRoute());
             int lineNumber = 1;
             for (CostScenario scenario : selectedScenarios) {
                 SupplierQuoteLine quoteLine = scenario.getQuote().getLines().stream()
@@ -114,6 +114,19 @@ public class TradeCycleService {
     }
 
     @Transactional
+    public TradeCycleResponse recordExternalOrder(UUID orderId, TradeCycleRequests.ExternalOrder request) {
+        PurchaseOrder order = requireOrder(orderId);
+        checkVersion(order, request.version());
+        if (order.getSupplierNameSnapshot().startsWith("샘플 도매꾹 판매자 "))
+            throw new BusinessException("샘플 도매 상품은 실제 외부 주문으로 기록할 수 없습니다.");
+        try {
+            order.recordExternalOrder(request.externalOrderReference(), request.totalAmount(), request.orderedAt());
+        } catch (IllegalArgumentException | IllegalStateException e) { throw new BusinessException(e.getMessage()); }
+        orders.saveAndFlush(order);
+        return response(order);
+    }
+
+    @Transactional
     public TradeCycleResponse allocate(TradeCycleRequests.AllocateShipment request) {
         var actor = currentActor.require();
         Long organizationId = actor.organization().getId();
@@ -124,6 +137,8 @@ public class TradeCycleService {
                         request.purchaseOrderLineId(), organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("발주 품목을 찾을 수 없습니다."));
         PurchaseOrder order = line.getPurchaseOrder();
+        if (order.getProcurementRoute() != PurchaseOrder.ProcurementRoute.IMPORT)
+            throw new BusinessException("국내 재고 매입은 선적에 배정할 수 없습니다.");
         if (!EnumSet.of(PurchaseOrder.Status.APPROVED, PurchaseOrder.Status.PARTIALLY_SHIPPED,
                 PurchaseOrder.Status.SHIPPED).contains(order.getStatus())) {
             throw new BusinessException("승인되어 진행 중인 발주만 선적에 배정할 수 있습니다.");
@@ -169,6 +184,9 @@ public class TradeCycleService {
             }
             ShipmentAllocation allocation = allocations.findByPublicIdAndOrganizationId(entry.allocationId(), organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("선적 배정을 찾을 수 없습니다."));
+            if (allocation.getPurchaseOrderLine().getPurchaseOrder().getProcurementRoute()
+                    != PurchaseOrder.ProcurementRoute.IMPORT)
+                throw new BusinessException("국내 재고 매입은 선적 입고를 사용할 수 없습니다.");
             if (!allocation.getShipment().getId().equals(shipment.getId())) throw new BusinessException("선택한 화물의 배정만 입고할 수 있습니다.");
             BigDecimal received = receiptLines.sumReceivedByAllocation(allocation.getId());
             if (received.add(entry.quantity()).compareTo(allocation.getAllocatedQuantity()) > 0) {
@@ -190,6 +208,54 @@ public class TradeCycleService {
             receipts.saveAndFlush(receipt);
             touched.forEach(order -> { refreshProgress(order); orders.saveAndFlush(order); });
             return response(touched.iterator().next());
+        } catch (IllegalArgumentException e) { throw new BusinessException(e.getMessage()); }
+        catch (DataIntegrityViolationException e) { throw new ConflictException("입고번호나 로트번호가 이미 사용 중입니다."); }
+    }
+
+    @Transactional
+    public TradeCycleResponse receiveDomestic(UUID orderId, TradeCycleRequests.CreateDomesticReceipt request) {
+        var actor = currentActor.require();
+        Long organizationId = actor.organization().getId();
+        PurchaseOrder order = requireOrder(orderId);
+        checkVersion(order, request.version());
+        if (order.getProcurementRoute() != PurchaseOrder.ProcurementRoute.DOMESTIC_STOCK)
+            throw new BusinessException("국내 재고 매입 발주만 직접 입고할 수 있습니다.");
+        if (order.getExternalOrderStatus() != PurchaseOrder.ExternalOrderStatus.PLACED
+                || !EnumSet.of(PurchaseOrder.Status.APPROVED, PurchaseOrder.Status.PARTIALLY_RECEIVED).contains(order.getStatus()))
+            throw new BusinessException("외부 주문을 기록한 진행 중 발주만 입고할 수 있습니다.");
+        if (receipts.existsByOrganizationIdAndReceiptNumber(organizationId, request.receiptNumber().trim()))
+            throw new ConflictException("조직 내에서 이미 사용 중인 입고번호입니다.");
+        Set<UUID> lineIds = new HashSet<>();
+        Set<String> lotNumbers = new HashSet<>();
+        List<ResolvedDomesticReceipt> resolved = new ArrayList<>();
+        for (TradeCycleRequests.DomesticReceiptEntry entry : request.lines()) {
+            if (!lineIds.add(entry.purchaseOrderLineId()))
+                throw new BusinessException("한 입고에 같은 발주 품목을 중복 입력할 수 없습니다.");
+            String lotNumber = entry.lotNumber().trim();
+            if (!lotNumbers.add(lotNumber) || lots.existsByOrganizationIdAndLotNumber(organizationId, lotNumber))
+                throw new ConflictException("조직 내에서 이미 사용 중인 로트번호입니다: " + lotNumber);
+            PurchaseOrderLine line = orderLines.findByPublicIdAndPurchaseOrderOrganizationId(
+                    entry.purchaseOrderLineId(), organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("발주 품목을 찾을 수 없습니다."));
+            if (!line.getPurchaseOrder().getId().equals(order.getId()))
+                throw new BusinessException("선택한 발주의 품목만 입고할 수 있습니다.");
+            BigDecimal received = receiptLines.sumReceivedByOrderLine(line.getId());
+            if (received.add(entry.quantity()).compareTo(line.getOrderedQuantity()) > 0)
+                throw new BusinessException("입고수량이 발주수량을 초과합니다.");
+            resolved.add(new ResolvedDomesticReceipt(line, entry));
+        }
+        try {
+            Receipt receipt = new Receipt(actor.organization(), actor.user(), order, request.receiptNumber(),
+                    request.receivedAt(), request.notes());
+            for (ResolvedDomesticReceipt item : resolved) {
+                InventoryLot lot = new InventoryLot(actor.organization(), item.line(), receipt,
+                        item.entry().lotNumber(), item.entry().quantity());
+                receipt.addLine(new ReceiptLine(receipt, item.line(), lot, item.entry().quantity()));
+            }
+            receipts.saveAndFlush(receipt);
+            refreshProgress(order);
+            orders.saveAndFlush(order);
+            return response(order);
         } catch (IllegalArgumentException e) { throw new BusinessException(e.getMessage()); }
         catch (DataIntegrityViolationException e) { throw new ConflictException("입고번호나 로트번호가 이미 사용 중입니다."); }
     }
@@ -307,7 +373,9 @@ public class TradeCycleService {
                 new TradeCycleResponse.LineView(line.getPublicId(), line.getCostScenario().getPublicId(),
                         line.getProduct().getPublicId(), line.getProductNameSnapshot(), line.getInternalSkuSnapshot(),
                         line.getOrderedQuantity(), shippedByLine.get(line.getId()),
-                        receivedByLine.get(line.getId()), line.getQuantityUnit(), line.getUnitPrice())).toList());
+                        receivedByLine.get(line.getId()), line.getQuantityUnit(), line.getUnitPrice())).toList(),
+                order.getProcurementRoute(), order.getExternalOrderStatus(), order.getExternalOrderReference(),
+                order.getExternalOrderTotal(), order.getExternalOrderedAt());
         List<TradeCycleResponse.AllocationView> allocationViews = orderAllocations.stream().map(item ->
                 new TradeCycleResponse.AllocationView(item.getPublicId(), item.getShipment().getPublicId(),
                         item.getShipment().getCaseNumber(), item.getPurchaseOrderLine().getPublicId(), item.getAllocatedQuantity(),
@@ -337,4 +405,5 @@ public class TradeCycleService {
     }
 
     private record ResolvedReceipt(ShipmentAllocation allocation, TradeCycleRequests.ReceiptEntry entry) {}
+    private record ResolvedDomesticReceipt(PurchaseOrderLine line, TradeCycleRequests.DomesticReceiptEntry entry) {}
 }

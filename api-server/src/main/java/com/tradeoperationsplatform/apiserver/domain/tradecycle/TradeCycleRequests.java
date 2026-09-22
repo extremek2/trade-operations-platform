@@ -16,7 +16,8 @@ public final class TradeCycleRequests {
             @NotEmpty List<@NotNull UUID> costScenarioIds,
             @NotBlank @Size(max = 100) String orderNumber,
             LocalDate orderedAt,
-            @Size(max = 2000) String notes
+            @Size(max = 2000) String notes,
+            PurchaseOrder.ProcurementRoute procurementRoute
     ) {}
     public record OrderAction(@NotNull Long version) {}
     public record Payment(
@@ -25,6 +26,12 @@ public final class TradeCycleRequests {
             @NotNull @PositiveOrZero BigDecimal paidAmount,
             LocalDate paidAt,
             @Size(max = 1000) String evidenceReference
+    ) {}
+    public record ExternalOrder(
+            @NotNull Long version,
+            @NotBlank @Size(max = 200) String externalOrderReference,
+            @NotNull @PositiveOrZero BigDecimal totalAmount,
+            @NotNull LocalDate orderedAt
     ) {}
     public record AllocateShipment(
             @NotNull UUID shipmentId,
@@ -40,6 +47,18 @@ public final class TradeCycleRequests {
     ) {}
     public record ReceiptEntry(
             @NotNull UUID allocationId,
+            @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal quantity,
+            @NotBlank @Size(max = 100) String lotNumber
+    ) {}
+    public record CreateDomesticReceipt(
+            @NotNull Long version,
+            @NotBlank @Size(max = 100) String receiptNumber,
+            LocalDateTime receivedAt,
+            @Size(max = 2000) String notes,
+            @NotEmpty List<@Valid DomesticReceiptEntry> lines
+    ) {}
+    public record DomesticReceiptEntry(
+            @NotNull UUID purchaseOrderLineId,
             @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal quantity,
             @NotBlank @Size(max = 100) String lotNumber
     ) {}

@@ -50,7 +50,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/shipments/**", "/api/v1/organizations/**", "/api/v1/products/**",
                                 "/api/v1/quotes/**", "/api/v1/cost-scenarios/**", "/api/v1/trade-cycles/**",
                                 "/api/v1/supplier-offer-drafts/**", "/api/v1/supplier-documents/**",
-                                "/api/v1/purchase-selections/**")
+                                "/api/v1/purchase-selections/**", "/api/v1/wholesale-catalog/**")
                         .hasAnyRole("OWNER", "ADMIN", "OPERATOR", "VIEWER")
                         .requestMatchers(
                                 "/api/v1/auth/signup",

@@ -57,6 +57,45 @@ class SupplierOfferIntegrationTest extends PostgresTestSupport {
     }
 
     @Test
+    void sampleWholesaleCatalogCreatesReviewableOfferWithoutExternalPurchase() throws Exception {
+        JsonNode search = body(call(get("/api/v1/wholesale-catalog/items")
+                .param("keyword", "테스트").param("mode", "SAMPLE"), owner, null)
+                .andExpect(status().isOk()));
+        assertThat(search).hasSize(3);
+        assertThat(search.get(0).get("mode").asText()).isEqualTo("SAMPLE");
+        assertThat(search.get(0).get("productUrl").isNull()).isTrue();
+        JsonNode detail = body(call(get("/api/v1/wholesale-catalog/items/1002")
+                .param("mode", "SAMPLE"), owner, null).andExpect(status().isOk()));
+        assertThat(detail.get("priceTiers").asText()).contains("20+4100");
+        assertThat(detail.get("unitPrice").isNull()).isTrue();
+
+        long artifactCount = artifacts.count();
+        long draftCount = drafts.count();
+        JsonNode imported = body(call(post("/api/v1/wholesale-catalog/items/1002/offer-draft")
+                .param("mode", "SAMPLE"), owner, null).andExpect(status().isCreated()));
+        assertThat(imported.get("sourceType").asText()).isEqualTo("API");
+        assertThat(imported.get("extractionMethod").asText()).isEqualTo("API");
+        assertThat(imported.get("status").asText()).isEqualTo("REVIEW_REQUIRED");
+        assertThat(imported.get("currency").asText()).isEqualTo("KRW");
+        assertThat(imported.at("/lines/0/unitPrice").isNull()).isTrue();
+        assertThat(imported.at("/lines/0/notes").asText()).contains("구간가").contains("샘플 데이터");
+        assertThat(imported.get("supplierName").asText()).contains("sample_household");
+        assertThat(artifacts.count()).isEqualTo(artifactCount + 1);
+        assertThat(drafts.count()).isEqualTo(draftCount + 1);
+
+        JsonNode retry = body(call(post("/api/v1/wholesale-catalog/items/1002/offer-draft")
+                .param("mode", "SAMPLE"), owner, null).andExpect(status().isCreated()));
+        assertThat(retry.get("draftId").asText()).isEqualTo(imported.get("draftId").asText());
+        assertThat(drafts.count()).isEqualTo(draftCount + 1);
+        call(post("/api/v1/wholesale-catalog/items/1002/offer-draft")
+                .param("mode", "SAMPLE"), viewer, null).andExpect(status().isForbidden());
+        call(post("/api/v1/wholesale-catalog/items/1003/offer-draft")
+                .param("mode", "SAMPLE"), owner, null).andExpect(status().isBadRequest());
+        call(get("/api/v1/supplier-offer-drafts/" + imported.get("draftId").asText()), other, null)
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void importsXlsxPreservesItsIdentityAndReturnsSameDraftOnRetry() throws Exception {
         JsonNode supplier = body(call(post("/api/v1/organizations/current/partners"), owner,
                 Map.of("name", "파일 제안 공급처 " + UUID.randomUUID(), "roles", List.of("SUPPLIER")))

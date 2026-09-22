@@ -9,7 +9,8 @@ jest.mock("../api/shipmentApi", () => ({ getShipments: jest.fn() }));
 jest.mock("../api/tradeCycleApi", () => ({
   getTradeCycles: jest.fn(), createPurchaseOrder: jest.fn(), approvePurchaseOrder: jest.fn(),
   cancelPurchaseOrder: jest.fn(), recordPurchasePayment: jest.fn(), allocateShipment: jest.fn(),
-  createReceipt: jest.fn(), addActualCost: jest.fn(), closeActualCost: jest.fn(),
+  createReceipt: jest.fn(), createDomesticReceipt: jest.fn(), recordExternalOrder: jest.fn(),
+  addActualCost: jest.fn(), closeActualCost: jest.fn(),
   addSalesObservation: jest.fn(), addReorderDecision: jest.fn(),
 }));
 jest.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { role: "OWNER" } }) }));
@@ -50,7 +51,7 @@ test("같은 견적의 완성 원가안 여러 개로 발주를 만들고 초안
   fireEvent.click(within(createForm).getByLabelText(/보관 파우치 · 파우치 기준안/));
   fireEvent.change(within(createForm).getByLabelText("발주번호"), { target: { value: "PO-002" } });
   fireEvent.click(within(createForm).getByRole("button", { name: "발주 초안 생성" }));
-  await waitFor(() => expect(createPurchaseOrder).toHaveBeenCalledWith({ costScenarioIds: ["scenario-1", "scenario-2"], orderNumber: "PO-002" }));
+  await waitFor(() => expect(createPurchaseOrder).toHaveBeenCalledWith({ costScenarioIds: ["scenario-1", "scenario-2"], orderNumber: "PO-002", procurementRoute: "IMPORT" }));
 
   const approveButton = screen.getByRole("button", { name: "발주 승인" });
   await waitFor(() => expect(approveButton).not.toBeDisabled());

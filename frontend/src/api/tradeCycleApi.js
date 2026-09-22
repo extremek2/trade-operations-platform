@@ -13,10 +13,16 @@ export const cancelPurchaseOrder = (orderId, version) => apiRequest(`/trade-cycl
 export const recordPurchasePayment = (orderId, payload) => apiRequest(`/trade-cycles/purchase-orders/${orderId}/payment`, {
   method: "POST", body: JSON.stringify(payload),
 });
+export const recordExternalOrder = (orderId, payload) => apiRequest(`/trade-cycles/purchase-orders/${orderId}/external-order`, {
+  method: "POST", body: JSON.stringify(payload),
+});
 export const allocateShipment = payload => apiRequest("/trade-cycles/shipment-allocations", {
   method: "POST", body: JSON.stringify(payload),
 });
 export const createReceipt = payload => apiRequest("/trade-cycles/receipts", {
+  method: "POST", body: JSON.stringify(payload),
+});
+export const createDomesticReceipt = (orderId, payload) => apiRequest(`/trade-cycles/purchase-orders/${orderId}/domestic-receipts`, {
   method: "POST", body: JSON.stringify(payload),
 });
 export const addActualCost = (orderId, payload) => apiRequest(`/trade-cycles/purchase-orders/${orderId}/actual-costs`, {

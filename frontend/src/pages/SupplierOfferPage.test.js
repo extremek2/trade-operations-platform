@@ -4,6 +4,7 @@ import { getProducts } from "../api/productApi";
 import { createDocumentDraft, createPurchaseSelection, createSupplierOfferDraft, getPurchaseSelections,
   getSupplierDocuments, getSupplierOfferDrafts, importSupplierDocument, importSupplierOfferFile } from "../api/supplierOfferApi";
 import { getSupplierDocumentContent, reviewSupplierOfferDraft } from "../api/supplierOfferApi";
+import { searchWholesaleCatalog, getWholesaleCatalogItem, importWholesaleCatalogItem } from "../api/supplierOfferApi";
 import SupplierOfferPage from "./SupplierOfferPage";
 
 jest.mock("../api/partnerApi", () => ({ getBusinessPartners: jest.fn() }));
@@ -14,6 +15,7 @@ jest.mock("../api/supplierOfferApi", () => ({
   getPurchaseSelections: jest.fn(), getSupplierDocuments: jest.fn(), getSupplierDocumentContent: jest.fn(),
   getSupplierOfferDrafts: jest.fn(), importSupplierDocument: jest.fn(), importSupplierOfferFile: jest.fn(), reviewSupplierOfferLine: jest.fn(),
   reviewSupplierOfferDraft: jest.fn(),
+  searchWholesaleCatalog: jest.fn(), getWholesaleCatalogItem: jest.fn(), importWholesaleCatalogItem: jest.fn(),
 }));
 jest.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { role: "OWNER" } }) }));
 
@@ -41,8 +43,28 @@ beforeEach(() => {
   createDocumentDraft.mockResolvedValue({});
   getSupplierDocumentContent.mockResolvedValue(new Blob(["%PDF-sample"], { type: "application/pdf" }));
   reviewSupplierOfferDraft.mockResolvedValue({});
+  searchWholesaleCatalog.mockResolvedValue([]);
+  getWholesaleCatalogItem.mockResolvedValue({});
+  importWholesaleCatalogItem.mockResolvedValue({});
   URL.createObjectURL = jest.fn(() => "blob:document-preview");
   URL.revokeObjectURL = jest.fn();
+});
+
+test("도매 사이트 샘플 상품을 상세 확인 후 검토 초안으로 가져온다", async () => {
+  searchWholesaleCatalog.mockResolvedValue([{ itemId: "1002", title: "테스트 생활용품 박스", sellerId: "sample_household",
+    unitPrice: 4500, minimumQuantity: 5, businessOnly: true, overseasShipping: false }]);
+  getWholesaleCatalogItem.mockResolvedValue({ itemId: "1002", title: "테스트 생활용품 박스",
+    sellerId: "sample_household", minimumQuantity: 5, priceTiers: "1+4500|20+4100", unitPrice: null,
+    availableQuantity: 85, shippingFee: "수량별 배송비", businessOnly: true, overseasShipping: false,
+    fetchedAt: "2026-09-22T17:00:00", productUrl: null });
+  render(<SupplierOfferPage navigate={jest.fn()}/>);
+  const searchForm = screen.getByRole("form", { name: "도매 상품 검색" });
+  fireEvent.click(within(searchForm).getByRole("button", { name: "상품 조회" }));
+  await waitFor(() => expect(searchWholesaleCatalog).toHaveBeenCalledWith("테스트", "SAMPLE"));
+  fireEvent.click(await screen.findByRole("button", { name: "상세 조건 확인" }));
+  expect(await screen.findByText(/수량별 단가 1\+4500\|20\+4100/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "검토 초안으로 가져오기" }));
+  await waitFor(() => expect(importWholesaleCatalogItem).toHaveBeenCalledWith("1002", "SAMPLE"));
 });
 
 test("문서 품목의 불확실한 수량을 수정하고 대조한 뒤 한 번에 확인한다", async () => {

@@ -9,6 +9,8 @@ import java.math.BigDecimal;
 public interface ReceiptLineRepository extends JpaRepository<ReceiptLine, Long> {
     @Query("select coalesce(sum(r.receivedQuantity), 0) from ReceiptLine r where r.allocation.id=:allocationId")
     BigDecimal sumReceivedByAllocation(@Param("allocationId") Long allocationId);
-    @Query("select coalesce(sum(r.receivedQuantity), 0) from ReceiptLine r where r.allocation.purchaseOrderLine.purchaseOrder.id=:orderId")
+    @Query("select coalesce(sum(r.receivedQuantity), 0) from ReceiptLine r where r.inventoryLot.purchaseOrderLine.purchaseOrder.id=:orderId")
     BigDecimal sumReceivedByOrder(@Param("orderId") Long orderId);
+    @Query("select coalesce(sum(r.receivedQuantity), 0) from ReceiptLine r where r.inventoryLot.purchaseOrderLine.id=:lineId")
+    BigDecimal sumReceivedByOrderLine(@Param("lineId") Long lineId);
 }

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<domeggook><basis><no>1003</no><title>테스트 해외직배송 소품</title></basis><price><dome>7000</dome></price><qty><inventory>12</inventory><domeMoq>1</domeMoq></qty><seller><id>sample_overseas</id></seller><deli><fromOversea>true</fromOversea><dome><fee>5000</fee></dome></deli><channel><dome>true</dome></channel></domeggook>

@@ -41,6 +41,8 @@ server:
   port: 8080
 
 app:
+  wholesale:
+    domeggook-api-key: ${DOMEGGOOK_API_KEY:}
   object-storage:
     enabled: ${OBJECT_STORAGE_ENABLED:false}
     endpoint: ${OBJECT_STORAGE_ENDPOINT:http://localhost:9000}

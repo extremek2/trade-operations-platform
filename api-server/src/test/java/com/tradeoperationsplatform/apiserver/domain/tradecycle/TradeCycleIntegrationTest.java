@@ -52,6 +52,64 @@ class TradeCycleIntegrationTest extends PostgresTestSupport {
     }
 
     @Test
+    void domesticOrderNeedsExternalOrderProofAndReceivesWithoutShipment() throws Exception {
+        JsonNode scenario = selectedScenario(ownerToken);
+        JsonNode created = body(call(post("/api/v1/trade-cycles/purchase-orders"), ownerToken, Map.of(
+                "costScenarioIds", List.of(scenario.get("scenarioId").asText()),
+                "orderNumber", "PO-DOMESTIC-" + UUID.randomUUID(), "procurementRoute", "DOMESTIC_STOCK"))
+                .andExpect(status().isCreated()));
+        String orderId = created.at("/purchaseOrder/purchaseOrderId").asText();
+        String lineId = created.at("/purchaseOrder/lines/0/purchaseOrderLineId").asText();
+        assertThat(created.at("/purchaseOrder/procurementRoute").asText()).isEqualTo("DOMESTIC_STOCK");
+        assertThat(created.at("/purchaseOrder/externalOrderStatus").asText()).isEqualTo("NOT_PLACED");
+        call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/external-order"), ownerToken,
+                Map.of("version", 0, "externalOrderReference", "PORTAL-001", "totalAmount", 100000,
+                        "orderedAt", "2026-09-22")).andExpect(status().isBadRequest());
+        JsonNode approved = body(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/approve"), ownerToken,
+                Map.of("version", 0)).andExpect(status().isOk()));
+        call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/domestic-receipts"), ownerToken,
+                Map.of("version", approved.at("/purchaseOrder/version").asLong(),
+                        "receiptNumber", "RCV-TOO-EARLY-" + UUID.randomUUID(),
+                        "lines", List.of(Map.of("purchaseOrderLineId", lineId, "quantity", 4,
+                                "lotNumber", "LOT-TOO-EARLY-" + UUID.randomUUID()))))
+                .andExpect(status().isBadRequest());
+        JsonNode shipment = shipment(ownerToken, "DOMESTIC-REJECT-");
+        call(post("/api/v1/trade-cycles/shipment-allocations"), ownerToken, Map.of(
+                "shipmentId", shipment.get("shipmentId").asText(), "purchaseOrderLineId", lineId, "quantity", 4))
+                .andExpect(status().isBadRequest());
+
+        JsonNode placed = body(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/external-order"), ownerToken,
+                Map.of("version", approved.at("/purchaseOrder/version").asLong(),
+                        "externalOrderReference", "PORTAL-001", "totalAmount", 103000,
+                        "orderedAt", "2026-09-22")).andExpect(status().isOk()));
+        assertThat(placed.at("/purchaseOrder/externalOrderStatus").asText()).isEqualTo("PLACED");
+        assertThat(placed.at("/purchaseOrder/status").asText()).isEqualTo("APPROVED");
+        String receiptPath = "/api/v1/trade-cycles/purchase-orders/" + orderId + "/domestic-receipts";
+        JsonNode partial = body(call(post(receiptPath), ownerToken, Map.of(
+                "version", placed.at("/purchaseOrder/version").asLong(),
+                "receiptNumber", "RCV-DOM-1-" + UUID.randomUUID(),
+                "lines", List.of(Map.of("purchaseOrderLineId", lineId, "quantity", 4,
+                        "lotNumber", "LOT-DOM-1-" + UUID.randomUUID())))).andExpect(status().isCreated()));
+        assertThat(partial.at("/purchaseOrder/status").asText()).isEqualTo("PARTIALLY_RECEIVED");
+        assertThat(partial.at("/purchaseOrder/lines/0/receivedQuantity").decimalValue()).isEqualByComparingTo("4");
+        call(post(receiptPath), ownerToken, Map.of(
+                "version", partial.at("/purchaseOrder/version").asLong(),
+                "receiptNumber", "RCV-DOM-OVER-" + UUID.randomUUID(),
+                "lines", List.of(Map.of("purchaseOrderLineId", lineId, "quantity", 7,
+                        "lotNumber", "LOT-DOM-OVER-" + UUID.randomUUID())))).andExpect(status().isBadRequest());
+        JsonNode completed = body(call(post(receiptPath), ownerToken, Map.of(
+                "version", partial.at("/purchaseOrder/version").asLong(),
+                "receiptNumber", "RCV-DOM-2-" + UUID.randomUUID(),
+                "lines", List.of(Map.of("purchaseOrderLineId", lineId, "quantity", 6,
+                        "lotNumber", "LOT-DOM-2-" + UUID.randomUUID())))).andExpect(status().isCreated()));
+        assertThat(completed.at("/purchaseOrder/status").asText()).isEqualTo("COMPLETED");
+        assertThat(completed.at("/inventoryLots")).hasSize(2);
+        assertThat(completed.at("/purchaseOrder/lines/0/receivedQuantity").decimalValue()).isEqualByComparingTo("10");
+        call(get("/api/v1/trade-cycles/purchase-orders/" + orderId), otherToken, null)
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void selectedScenarioFlowsThroughPartialShipmentReceiptCostSalesAndDecision() throws Exception {
         JsonNode scenario = selectedScenario(ownerToken);
         JsonNode cycle = body(call(post("/api/v1/trade-cycles/purchase-orders"), ownerToken, Map.of(

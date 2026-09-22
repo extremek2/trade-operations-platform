@@ -16,7 +16,7 @@ import java.util.UUID;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class SourceArtifact {
-    public enum SourceType { MANUAL, CSV, XLSX, PDF, IMAGE }
+    public enum SourceType { MANUAL, CSV, XLSX, PDF, IMAGE, API }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(name = "public_id", nullable = false, unique = true, updatable = false) private UUID publicId;
@@ -39,12 +39,19 @@ public class SourceArtifact {
 
     public SourceArtifact(Organization organization, BusinessPartner supplier, AppUser createdBy,
                           String sourceReference, String originalText, String contentHash) {
+        this(organization, supplier, createdBy, SourceType.MANUAL, sourceReference, originalText, contentHash);
+    }
+
+    public SourceArtifact(Organization organization, BusinessPartner supplier, AppUser createdBy,
+                          SourceType sourceType, String sourceReference, String originalText, String contentHash) {
+        if (sourceType != SourceType.MANUAL && sourceType != SourceType.API)
+            throw new IllegalArgumentException("텍스트 원본 형식이 올바르지 않습니다.");
         if (originalText == null || originalText.isBlank()) throw new IllegalArgumentException("원본 내용은 필수입니다.");
         this.publicId = UUID.randomUUID();
         this.organization = organization;
         this.supplier = supplier;
         this.createdBy = createdBy;
-        this.sourceType = SourceType.MANUAL;
+        this.sourceType = sourceType;
         this.sourceReference = sourceReference == null || sourceReference.isBlank() ? null : sourceReference.trim();
         this.originalText = originalText;
         this.contentType = "text/plain";

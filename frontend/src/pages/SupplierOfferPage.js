@@ -5,7 +5,8 @@ import {
   confirmSupplierOfferDraft, createDocumentDraft, createPurchaseSelection, createSupplierOfferDraft,
   excludeSupplierOfferLine, getPurchaseSelections, getSupplierDocumentContent, getSupplierDocuments,
   getSupplierOfferDrafts, importSupplierDocument, importSupplierOfferFile,
-  reviewSupplierOfferDraft, reviewSupplierOfferLine,
+  reviewSupplierOfferDraft, reviewSupplierOfferLine, searchWholesaleCatalog,
+  getWholesaleCatalogItem, importWholesaleCatalogItem,
 } from "../api/supplierOfferApi";
 import { EmptyState, ErrorMessage, LoadingState } from "../components/Feedback";
 import { useAuth } from "../context/AuthContext";
@@ -14,6 +15,7 @@ const editableRoles = ["OWNER", "ADMIN", "OPERATOR"];
 const initialForm = { supplierId: "", sourceReference: "", originalText: "", currency: "JPY", linesText: "" };
 const initialFileForm = { supplierId: "", sourceReference: "", currency: "JPY", file: null };
 const initialDocumentForm = { supplierId: "", sourceReference: "", file: null };
+const initialCatalogForm = { mode: "SAMPLE", keyword: "테스트" };
 const optionalNumber = value => value === "" ? undefined : Number(value);
 const optionalText = value => value.trim() || undefined;
 
@@ -220,6 +222,10 @@ export default function SupplierOfferPage({ navigate }) {
   const [form, setForm] = useState(initialForm);
   const [fileForm, setFileForm] = useState(initialFileForm);
   const [fileInputKey, setFileInputKey] = useState(0);
+  const [catalogForm, setCatalogForm] = useState(initialCatalogForm);
+  const [catalogRows, setCatalogRows] = useState([]);
+  const [catalogDetail, setCatalogDetail] = useState(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -302,11 +308,64 @@ export default function SupplierOfferPage({ navigate }) {
       setFileInputKey(current => current + 1);
     }
   };
+  const searchCatalog = async event => {
+    event.preventDefault();
+    setCatalogLoading(true); setError(""); setCatalogDetail(null);
+    try { setCatalogRows(await searchWholesaleCatalog(catalogForm.keyword.trim(), catalogForm.mode)); }
+    catch (err) { setCatalogRows([]); setError(err.message); }
+    finally { setCatalogLoading(false); }
+  };
+  const inspectCatalogItem = async itemId => {
+    setCatalogLoading(true); setError("");
+    try { setCatalogDetail(await getWholesaleCatalogItem(itemId, catalogForm.mode)); }
+    catch (err) { setError(err.message); }
+    finally { setCatalogLoading(false); }
+  };
+  const importCatalogItem = async itemId => {
+    const created = await run(() => importWholesaleCatalogItem(itemId, catalogForm.mode));
+    if (created) setCatalogDetail(null);
+  };
 
   return <>
     <header className="page-header"><div><span className="eyebrow">SUPPLIER OFFER</span><h1>공급 상품 제안</h1>
       <p>원본을 보존하고 추출값을 확인한 뒤 살 품목만 견적 원장으로 넘깁니다.</p></div></header>
     <ErrorMessage message={error}/>
+    <section className="panel"><div className="panel-header"><div><h2>사업자 도매 사이트 상품 조회</h2>
+      <p className="muted">도매꾹 상품을 조회해 제안 검토 초안으로 가져옵니다. 가격·옵션·배송비는 구매 전에 다시 확인해야 합니다.</p></div></div>
+      <form className="setup-form" aria-label="도매 상품 검색" onSubmit={searchCatalog}>
+        <div className="form-grid two">
+          <label>조회 방식<select value={catalogForm.mode} onChange={event => {
+            setCatalogForm(current => ({ ...current, mode: event.target.value }));
+            setCatalogRows([]); setCatalogDetail(null);
+          }}><option value="SAMPLE">샘플 데이터 · API 키 불필요</option><option value="LIVE">도매꾹 실제 API · 서버 키 필요</option></select></label>
+          <label>상품 검색어<input required maxLength="80" value={catalogForm.keyword}
+            onChange={event => setCatalogForm(current => ({ ...current, keyword: event.target.value }))}/></label>
+        </div>
+        <button className="button secondary" disabled={catalogLoading}>상품 조회</button>
+      </form>
+      {catalogForm.mode === "SAMPLE" && <p className="muted">샘플 가격과 재고는 테스트용이며 실제 구매할 수 없습니다.</p>}
+      {catalogLoading && <LoadingState/>}
+      {catalogRows.length > 0 && <div className="quote-list">{catalogRows.map(item => <article className="quote-entry" key={item.itemId}>
+        <h3>{item.title}</h3><p>도매꾹 #{item.itemId} · 판매자 {item.sellerId || "미확인"}</p>
+        <p>{item.unitPrice == null ? "단가 확인 필요" : `조회 단가 KRW ${item.unitPrice.toLocaleString()}`} · MOQ {item.minimumQuantity || "미확인"}개
+          {item.businessOnly ? " · 사업자 전용" : ""}{item.overseasShipping ? " · 해외직배송" : ""}</p>
+        <button type="button" className="button secondary" disabled={catalogLoading} onClick={() => inspectCatalogItem(item.itemId)}>상세 조건 확인</button>
+      </article>)}</div>}
+      {catalogDetail && <article className="quote-entry" aria-label="도매 상품 상세">
+        <h3>{catalogDetail.title}</h3>
+        <p>판매자 {catalogDetail.sellerId} · MOQ {catalogDetail.minimumQuantity}개 · 조회 시각 {catalogDetail.fetchedAt}</p>
+        <p>{catalogDetail.priceTiers ? `수량별 단가 ${catalogDetail.priceTiers} · 선택 수량의 단가를 직접 확인하세요.`
+          : `조회 단가 KRW ${catalogDetail.unitPrice?.toLocaleString() || "미확인"}`}</p>
+        <p>조회 당시 재고 {catalogDetail.availableQuantity ?? "미확인"}개 · 배송비 {catalogDetail.shippingFee || "미확인"}
+          {catalogDetail.businessOnly ? " · 사업자 회원 구매 상품" : ""}{catalogDetail.overseasShipping ? " · 해외직배송" : ""}</p>
+        <div className="form-actions">
+          {catalogDetail.productUrl && <a className="button secondary" href={catalogDetail.productUrl} target="_blank" rel="noopener noreferrer">원 사이트 상품 보기</a>}
+          {editable && <button type="button" className="button primary" disabled={saving || catalogDetail.overseasShipping}
+            onClick={() => importCatalogItem(catalogDetail.itemId)}>검토 초안으로 가져오기</button>}
+        </div>
+        {catalogDetail.overseasShipping && <p className="muted">해외직배송 상품은 국내 매입 실증에서 제외합니다.</p>}
+      </article>}
+    </section>
     {editable && <section className="panel"><div className="panel-header"><div><h2>PDF·이미지 문서 가져오기</h2>
       <p className="muted">원본을 보관하고 텍스트를 추출합니다. 초안의 각 행은 사람이 확인하기 전까지 구매 선택에 사용할 수 없습니다.</p></div></div>
       {suppliers.length === 0 ? <EmptyState title="공급처가 없습니다." description="공급 견적 화면에서 공급처를 먼저 등록하세요."/> :
@@ -393,7 +452,7 @@ export default function SupplierOfferPage({ navigate }) {
             {editable && draft.status === "REVIEW_REQUIRED" && !documentSources.includes(draft.sourceType) && <button className="button secondary" disabled={saving || draft.lines.some(line => line.status === "PENDING")}
               onClick={() => run(() => confirmSupplierOfferDraft(draft.draftId, draft.version))}>추출 확인</button>}
           </div>
-          {draft.sourceType === "MANUAL" ?
+          {draft.sourceType === "MANUAL" || draft.sourceType === "API" ?
             <details><summary>원본 내용 보기 · {draft.sourceReference || "수동 입력"}</summary><pre>{draft.originalText}</pre></details> :
             <details><summary>원본 파일 정보 · {draft.originalFileName}</summary><p>{draft.sourceType} · {draft.fileSize?.toLocaleString()} bytes · SHA-256 {draft.contentHash}</p>{draft.sourceReference && <p>{draft.sourceReference}</p>}
               {draft.extractedText && <pre>{draft.extractedText}</pre>}</details>}

@@ -47,6 +47,13 @@ public class TradeCycleController {
         return ApiResponse.ok(service.recordPayment(orderId, request));
     }
 
+    @PostMapping("/purchase-orders/{orderId}/external-order")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','OPERATOR')")
+    public ApiResponse<TradeCycleResponse> externalOrder(@PathVariable UUID orderId,
+            @Valid @RequestBody TradeCycleRequests.ExternalOrder request) {
+        return ApiResponse.ok(service.recordExternalOrder(orderId, request));
+    }
+
     @PostMapping("/shipment-allocations")
     @PreAuthorize("hasAnyRole('OWNER','ADMIN','OPERATOR')")
     @ResponseStatus(HttpStatus.CREATED)
@@ -59,6 +66,14 @@ public class TradeCycleController {
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<TradeCycleResponse> receive(@Valid @RequestBody TradeCycleRequests.CreateReceipt request) {
         return ApiResponse.ok("receipt created", service.receive(request));
+    }
+
+    @PostMapping("/purchase-orders/{orderId}/domestic-receipts")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','OPERATOR')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<TradeCycleResponse> receiveDomestic(@PathVariable UUID orderId,
+            @Valid @RequestBody TradeCycleRequests.CreateDomesticReceipt request) {
+        return ApiResponse.ok("domestic receipt created", service.receiveDomestic(orderId, request));
     }
 
     @PostMapping("/purchase-orders/{orderId}/actual-costs")

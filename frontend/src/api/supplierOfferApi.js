@@ -1,5 +1,14 @@
 import { apiBlob, apiRequest } from "./client";
 
+export const searchWholesaleCatalog = (keyword, mode) =>
+  apiRequest(`/wholesale-catalog/items?keyword=${encodeURIComponent(keyword)}&mode=${mode}`);
+export const getWholesaleCatalogItem = (itemId, mode) =>
+  apiRequest(`/wholesale-catalog/items/${encodeURIComponent(itemId)}?mode=${mode}`);
+export const importWholesaleCatalogItem = (itemId, mode) =>
+  apiRequest(`/wholesale-catalog/items/${encodeURIComponent(itemId)}/offer-draft?mode=${mode}`, {
+    method: "POST",
+  });
+
 export const getSupplierOfferDrafts = () => apiRequest("/supplier-offer-drafts");
 export const createSupplierOfferDraft = payload => apiRequest("/supplier-offer-drafts", {
   method: "POST", body: JSON.stringify(payload),

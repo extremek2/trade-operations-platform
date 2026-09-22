@@ -21,8 +21,10 @@ import java.util.UUID;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PurchaseOrder {
-    public enum Status { DRAFT, APPROVED, PARTIALLY_SHIPPED, SHIPPED, COMPLETED, CANCELLED }
+    public enum Status { DRAFT, APPROVED, PARTIALLY_SHIPPED, SHIPPED, PARTIALLY_RECEIVED, COMPLETED, CANCELLED }
     public enum PaymentStatus { UNPAID, PARTIALLY_PAID, PAID }
+    public enum ProcurementRoute { IMPORT, DOMESTIC_STOCK }
+    public enum ExternalOrderStatus { NOT_PLACED, PLACED }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(name = "public_id", nullable = false, unique = true, updatable = false) private UUID publicId;
@@ -30,6 +32,11 @@ public class PurchaseOrder {
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "supplier_id") private BusinessPartner supplier;
     @Column(name = "order_number", nullable = false) private String orderNumber;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private Status status;
+    @Enumerated(EnumType.STRING) @Column(name = "procurement_route", nullable = false) private ProcurementRoute procurementRoute;
+    @Enumerated(EnumType.STRING) @Column(name = "external_order_status", nullable = false) private ExternalOrderStatus externalOrderStatus;
+    @Column(name = "external_order_reference", length = 200) private String externalOrderReference;
+    @Column(name = "external_order_total", precision = 19, scale = 4) private BigDecimal externalOrderTotal;
+    @Column(name = "external_ordered_at") private LocalDate externalOrderedAt;
     @Enumerated(EnumType.STRING) @Column(name = "payment_status", nullable = false) private PaymentStatus paymentStatus;
     @Column(name = "paid_amount", nullable = false, precision = 19, scale = 4) private BigDecimal paidAmount;
     @Column(name = "paid_at") private LocalDate paidAt;
@@ -51,7 +58,7 @@ public class PurchaseOrder {
     @OrderBy("lineNumber ASC") private List<PurchaseOrderLine> lines = new ArrayList<>();
 
     public PurchaseOrder(Organization organization, AppUser creator, List<CostScenario> scenarios,
-                         String orderNumber, LocalDate orderedAt, String notes) {
+                         String orderNumber, LocalDate orderedAt, String notes, ProcurementRoute procurementRoute) {
         if (scenarios == null || scenarios.isEmpty()) throw new IllegalArgumentException("발주 품목은 한 개 이상이어야 합니다.");
         CostScenario first = scenarios.get(0);
         var productIds = new java.util.HashSet<Long>();
@@ -75,6 +82,10 @@ public class PurchaseOrder {
         this.supplier = first.getQuote().getSupplier();
         this.orderNumber = required(orderNumber, "발주번호");
         this.status = Status.DRAFT;
+        this.procurementRoute = procurementRoute == null ? ProcurementRoute.IMPORT : procurementRoute;
+        if (this.procurementRoute == ProcurementRoute.DOMESTIC_STOCK && !"KRW".equals(first.getQuoteCurrency()))
+            throw new IllegalArgumentException("국내 재고 매입은 KRW 견적만 사용할 수 있습니다.");
+        this.externalOrderStatus = ExternalOrderStatus.NOT_PLACED;
         this.paymentStatus = PaymentStatus.UNPAID;
         this.paidAmount = BigDecimal.ZERO;
         this.currency = first.getQuoteCurrency();
@@ -95,7 +106,22 @@ public class PurchaseOrder {
         approvedAt = LocalDateTime.now();
     }
 
+    public void recordExternalOrder(String reference, BigDecimal total, LocalDate date) {
+        if (status != Status.APPROVED || externalOrderStatus != ExternalOrderStatus.NOT_PLACED)
+            throw new IllegalStateException("승인 후 아직 외부 주문 기록이 없는 발주만 등록할 수 있습니다.");
+        if (reference == null || reference.isBlank() || reference.trim().length() > 200)
+            throw new IllegalArgumentException("외부 주문번호는 1~200자로 입력해 주세요.");
+        if (total == null || total.signum() < 0) throw new IllegalArgumentException("외부 주문금액이 올바르지 않습니다.");
+        if (date == null) throw new IllegalArgumentException("외부 주문일이 필요합니다.");
+        this.externalOrderReference = reference.trim();
+        this.externalOrderTotal = total;
+        this.externalOrderedAt = date;
+        this.externalOrderStatus = ExternalOrderStatus.PLACED;
+    }
+
     public void cancel() {
+        if (externalOrderStatus == ExternalOrderStatus.PLACED)
+            throw new IllegalStateException("외부 주문이 기록된 발주는 원 사이트 주문 확인 없이 취소할 수 없습니다.");
         if (status != Status.DRAFT && status != Status.APPROVED) {
             throw new IllegalStateException("선적이 시작된 발주는 취소할 수 없습니다.");
         }
@@ -117,6 +143,7 @@ public class PurchaseOrder {
     public void updateProgress(BigDecimal shipped, BigDecimal received, BigDecimal ordered) {
         if (status == Status.CANCELLED || status == Status.DRAFT) return;
         if (received.compareTo(ordered) >= 0) status = Status.COMPLETED;
+        else if (procurementRoute == ProcurementRoute.DOMESTIC_STOCK && received.signum() > 0) status = Status.PARTIALLY_RECEIVED;
         else if (shipped.compareTo(ordered) >= 0) status = Status.SHIPPED;
         else if (shipped.signum() > 0) status = Status.PARTIALLY_SHIPPED;
         else status = Status.APPROVED;

@@ -14,7 +14,7 @@ import java.util.UUID;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ExtractionRun {
-    public enum Method { MANUAL, CSV, XLSX, DOCUMENT, PDF_TEXT, OCR }
+    public enum Method { MANUAL, CSV, XLSX, DOCUMENT, PDF_TEXT, OCR, API }
     public enum Status { PENDING, RUNNING, SUCCEEDED, FAILED }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
@@ -46,6 +46,8 @@ public class ExtractionRun {
     public ExtractionRun(SourceArtifact sourceArtifact, Method method, String extractorVersion) {
         if (method == null || method == Method.MANUAL)
             throw new IllegalArgumentException("파일 추출 방식이 올바르지 않습니다.");
+        if (method == Method.API && sourceArtifact.getSourceType() != SourceArtifact.SourceType.API)
+            throw new IllegalArgumentException("API 원본이 올바르지 않습니다.");
         if (extractorVersion == null || extractorVersion.isBlank())
             throw new IllegalArgumentException("추출기 버전은 필수입니다.");
         this.publicId = UUID.randomUUID();

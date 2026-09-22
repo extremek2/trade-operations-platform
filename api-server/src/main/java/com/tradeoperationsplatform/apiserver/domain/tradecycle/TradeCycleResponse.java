@@ -21,7 +21,10 @@ public record TradeCycleResponse(
             String paymentEvidence, String currency, UUID supplierId, String supplierName,
             String quoteNumberSnapshot, int quoteRevisionSnapshot,
             BigDecimal expectedTotalCostKrw, LocalDate orderedAt, String notes, long version,
-            LocalDateTime createdAt, List<LineView> lines
+            LocalDateTime createdAt, List<LineView> lines,
+            PurchaseOrder.ProcurementRoute procurementRoute,
+            PurchaseOrder.ExternalOrderStatus externalOrderStatus,
+            String externalOrderReference, BigDecimal externalOrderTotal, LocalDate externalOrderedAt
     ) {}
     public record LineView(
             UUID purchaseOrderLineId, UUID costScenarioId, UUID productId, String productName, String internalSku,

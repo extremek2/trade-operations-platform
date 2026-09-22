@@ -4,7 +4,7 @@ import { getShipments } from "../api/shipmentApi";
 import {
   addActualCost, addReorderDecision, addSalesObservation, allocateShipment,
   approvePurchaseOrder, cancelPurchaseOrder, closeActualCost, createPurchaseOrder,
-  createReceipt, getTradeCycles, recordPurchasePayment,
+  createReceipt, createDomesticReceipt, getTradeCycles, recordPurchasePayment, recordExternalOrder,
 } from "../api/tradeCycleApi";
 import { EmptyState, ErrorMessage, LoadingState } from "../components/Feedback";
 import StatusBadge from "../components/StatusBadge";
@@ -13,7 +13,7 @@ import { useAuth } from "../context/AuthContext";
 const editableRoles = ["OWNER", "ADMIN", "OPERATOR"];
 const statusLabels = {
   DRAFT: "발주 초안", APPROVED: "발주 승인", PARTIALLY_SHIPPED: "부분 선적", SHIPPED: "전량 선적",
-  COMPLETED: "입고 완료", CANCELLED: "취소", UNPAID: "미결제", PARTIALLY_PAID: "부분 결제", PAID: "결제 완료",
+  PARTIALLY_RECEIVED: "부분 입고", COMPLETED: "입고 완료", CANCELLED: "취소", UNPAID: "미결제", PARTIALLY_PAID: "부분 결제", PAID: "결제 완료",
   REORDER: "재발주", WATCH: "관찰", STOP: "중단",
 };
 const money = value => value == null ? "—" : `${new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2 }).format(value)}원`;
@@ -21,8 +21,9 @@ const quantity = value => new Intl.NumberFormat("ko-KR", { maximumFractionDigits
 const toNumber = value => Number(value);
 
 const initial = {
-  scenarioIds: [], orderNumber: "", notes: "", shipmentId: "", purchaseOrderLineId: "", allocationQuantity: "",
+  scenarioIds: [], orderNumber: "", notes: "", procurementRoute: "IMPORT", shipmentId: "", purchaseOrderLineId: "", allocationQuantity: "",
   allocationId: "", receiptNumber: "", receiptQuantity: "", lotNumber: "",
+  externalOrderReference: "", externalTotalAmount: "", externalOrderedAt: "", domesticLineId: "",
   paymentStatus: "PAID", paidAmount: "", paidAt: "", paymentEvidence: "",
   costType: "PRODUCT", costDescription: "", amountKrw: "", evidenceReference: "",
   inventoryLotId: "", channel: "", soldQuantity: "", returnedQuantity: "0",
@@ -92,8 +93,13 @@ export default function TradeCyclePage({ navigate }) {
   }));
 
   const createOrder = () => perform(() => createPurchaseOrder({
-    costScenarioIds: form.scenarioIds, orderNumber: form.orderNumber, ...(form.notes && { notes: form.notes }),
+    costScenarioIds: form.scenarioIds, orderNumber: form.orderNumber,
+    procurementRoute: form.procurementRoute, ...(form.notes && { notes: form.notes }),
   }), { scenarioIds: [], orderNumber: "", notes: "" });
+  const recordPortalOrder = () => perform(() => recordExternalOrder(active.purchaseOrder.purchaseOrderId, {
+    version: active.purchaseOrder.version, externalOrderReference: form.externalOrderReference,
+    totalAmount: toNumber(form.externalTotalAmount), orderedAt: form.externalOrderedAt,
+  }), { externalOrderReference: "", externalTotalAmount: "", externalOrderedAt: "" });
   const allocate = () => perform(() => allocateShipment({
     shipmentId: form.shipmentId,
     purchaseOrderLineId: form.purchaseOrderLineId,
@@ -104,6 +110,10 @@ export default function TradeCyclePage({ navigate }) {
     receiptNumber: form.receiptNumber,
     lines: [{ allocationId: form.allocationId, quantity: toNumber(form.receiptQuantity), lotNumber: form.lotNumber }],
   }), { allocationId: "", receiptNumber: "", receiptQuantity: "", lotNumber: "" });
+  const receiveDomestic = () => perform(() => createDomesticReceipt(active.purchaseOrder.purchaseOrderId, {
+    version: active.purchaseOrder.version, receiptNumber: form.receiptNumber,
+    lines: [{ purchaseOrderLineId: form.domesticLineId, quantity: toNumber(form.receiptQuantity), lotNumber: form.lotNumber }],
+  }), { domesticLineId: "", receiptNumber: "", receiptQuantity: "", lotNumber: "" });
   const addCost = () => perform(() => addActualCost(active.purchaseOrder.purchaseOrderId, {
     costType: form.costType, description: form.costDescription, amountKrw: toNumber(form.amountKrw),
     ...(form.evidenceReference && { evidenceReference: form.evidenceReference }),
@@ -115,8 +125,8 @@ export default function TradeCyclePage({ navigate }) {
   }), { inventoryLotId: "", channel: "", soldQuantity: "", returnedQuantity: "0", grossRevenueKrw: "", channelCostKrw: "0" });
 
   return <>
-    <header className="page-header"><div><span className="eyebrow">END-TO-END IMPORT CYCLE</span><h1>수입 운영 사이클</h1>
-      <p>선택 견적의 발주부터 선적·입고·실제 원가·판매 결과·재발주 판단까지 한 줄로 추적합니다.</p></div></header>
+    <header className="page-header"><div><span className="eyebrow">PURCHASE CYCLE</span><h1>매입·수입 운영 사이클</h1>
+      <p>선택 견적의 발주부터 국내 입고 또는 선적·입고, 실제 원가·판매 결과까지 추적합니다.</p></div></header>
     <ErrorMessage message={error}/>
     {loading ? <LoadingState label="수입 사이클을 불러오는 중입니다."/> : <>
       {editable && <section className="panel cycle-create">
@@ -130,6 +140,9 @@ export default function TradeCyclePage({ navigate }) {
                 disabled={disabled} onChange={() => toggleScenario(item)}/>{item.productName} · {item.scenarioName} R{item.revisionNumber} · {quantity(item.orderQuantity)}개</label>;
             })}</fieldset>
             <label>발주번호<input required maxLength="100" value={form.orderNumber} onChange={e => update("orderNumber", e.target.value)}/></label>
+            <label>매입 경로<select value={form.procurementRoute} onChange={e => update("procurementRoute", e.target.value)}>
+              <option value="DOMESTIC_STOCK">국내 재고 매입 · 사이트/견적 구매</option><option value="IMPORT">해외 매입 · 선적 연결</option>
+            </select></label>
             <label>메모<input maxLength="2000" value={form.notes} onChange={e => update("notes", e.target.value)}/></label>
             <div className="form-actions cycle-submit"><button disabled={saving || form.scenarioIds.length === 0} className="button primary">발주 초안 생성</button></div>
           </form>}
@@ -140,10 +153,24 @@ export default function TradeCyclePage({ navigate }) {
           {cycles.map(item => <option key={item.purchaseOrder.purchaseOrderId} value={item.purchaseOrder.purchaseOrderId}>{item.purchaseOrder.orderNumber} · {item.purchaseOrder.lines[0]?.productName}</option>)}</select></label></section>
         <CycleSummary cycle={active} ordered={ordered} shipped={shipped} received={received}/>
 
-        {editable && active.purchaseOrder.status === "DRAFT" && <section className="panel cycle-action"><div><h2>1. 발주 확정</h2><p className="muted">발주 조건을 확인한 뒤 승인하면 선적 배정이 열립니다.</p></div><div className="cycle-buttons">
+        {editable && active.purchaseOrder.status === "DRAFT" && <section className="panel cycle-action"><div><h2>1. 발주 확정</h2><p className="muted">승인은 내부 결정입니다. 외부 사이트 주문·결제는 별도입니다.</p></div><div className="cycle-buttons">
           <button disabled={saving} className="button primary" onClick={() => perform(() => approvePurchaseOrder(active.purchaseOrder.purchaseOrderId, active.purchaseOrder.version))}>발주 승인</button>
           {user?.role !== "OPERATOR" && <button disabled={saving} className="button danger" onClick={() => perform(() => cancelPurchaseOrder(active.purchaseOrder.purchaseOrderId, active.purchaseOrder.version))}>발주 취소</button>}
         </div></section>}
+
+        {(active.purchaseOrder.procurementRoute === "DOMESTIC_STOCK") && <section className="panel panel-body form-stack">
+          <h2>2. 사업자 사이트 주문 인계</h2>
+          <p className="muted">내부 발주 승인 {active.purchaseOrder.status === "DRAFT" ? "대기" : "완료"} · 외부 주문 {active.purchaseOrder.externalOrderStatus === "PLACED" ? "번호 기록됨" : "미기록"}. 실제 주문·결제는 원 사이트에서 사용자가 진행합니다.</p>
+          {active.purchaseOrder.externalOrderStatus === "PLACED" && <p>외부 주문번호 {active.purchaseOrder.externalOrderReference} · 확정금액 {active.purchaseOrder.currency} {quantity(active.purchaseOrder.externalOrderTotal)}</p>}
+          {editable && active.purchaseOrder.status === "APPROVED" && active.purchaseOrder.externalOrderStatus !== "PLACED" &&
+            <form className="form-grid three" aria-label="외부 주문 기록" onSubmit={submit(recordPortalOrder)}>
+              <label>원 사이트 주문번호<input required maxLength="200" value={form.externalOrderReference} onChange={e => update("externalOrderReference", e.target.value)}/></label>
+              <label>확정 주문금액 ({active.purchaseOrder.currency})<input required type="number" min="0" step="0.0001" value={form.externalTotalAmount} onChange={e => update("externalTotalAmount", e.target.value)}/></label>
+              <label>원 사이트 주문일<input required type="date" value={form.externalOrderedAt} onChange={e => update("externalOrderedAt", e.target.value)}/></label>
+              <button className="button secondary" disabled={saving || active.purchaseOrder.supplierName.startsWith("샘플 도매꾹 판매자 ")}>외부 주문번호 기록</button>
+              {active.purchaseOrder.supplierName.startsWith("샘플 도매꾹 판매자 ") && <p className="muted">샘플 제안은 실제 외부 주문·입고로 기록할 수 없습니다.</p>}
+            </form>}
+        </section>}
 
         {editable && !["DRAFT", "CANCELLED", "COMPLETED"].includes(active.purchaseOrder.status) && <section className="cycle-grid">
           <form className="panel panel-body form-stack" aria-label="결제 기록" onSubmit={submit(() => perform(() => recordPurchasePayment(active.purchaseOrder.purchaseOrderId, {
@@ -155,7 +182,7 @@ export default function TradeCyclePage({ navigate }) {
             <label>결제일<input required={form.paymentStatus !== "UNPAID"} type="date" value={form.paidAt} onChange={e => update("paidAt", e.target.value)}/></label>
             <label>증빙 참조<input value={form.paymentEvidence} onChange={e => update("paymentEvidence", e.target.value)}/></label><button disabled={saving} className="button secondary">기록</button>
           </form>
-          {allocatableLines.length > 0 && <form className="panel panel-body form-stack" aria-label="선적 배정" onSubmit={submit(allocate)}>
+          {active.purchaseOrder.procurementRoute !== "DOMESTIC_STOCK" && allocatableLines.length > 0 && <form className="panel panel-body form-stack" aria-label="선적 배정" onSubmit={submit(allocate)}>
             <h2>2. 선적 배정</h2>{shipments.length === 0 ? <><p className="muted">배정할 진행 화물이 없습니다.</p><button type="button" className="button ghost" onClick={() => navigate("/shipments/new")}>화물 먼저 등록</button></> : <>
               <label>화물<select required value={form.shipmentId} onChange={e => update("shipmentId", e.target.value)}><option value="">선택</option>{shipments.map(item => <option value={item.shipmentId} key={item.shipmentId}>{item.caseNumber}</option>)}</select></label>
               <label>발주 품목<select required value={form.purchaseOrderLineId} onChange={e => update("purchaseOrderLineId", e.target.value)}><option value="">선택</option>{allocatableLines.map(line => <option value={line.purchaseOrderLineId} key={line.purchaseOrderLineId}>{line.productName} · 잔여 {quantity(Number(line.orderedQuantity) - Number(line.shippedQuantity))} {line.quantityUnit}</option>)}</select></label>
@@ -163,6 +190,21 @@ export default function TradeCyclePage({ navigate }) {
               <button disabled={saving} className="button secondary">선적에 배정</button></>}
           </form>}
         </section>}
+
+        {editable && active.purchaseOrder.procurementRoute === "DOMESTIC_STOCK"
+          && active.purchaseOrder.externalOrderStatus === "PLACED"
+          && ["APPROVED", "PARTIALLY_RECEIVED"].includes(active.purchaseOrder.status)
+          && <form className="panel panel-body cycle-receipt form-grid four" aria-label="국내 입고 처리" onSubmit={submit(receiveDomestic)}>
+            <div className="cycle-form-heading"><h2>3. 국내 입고</h2><p className="muted">선적 없이 발주 품목의 실입고 수량을 기록합니다.</p></div>
+            <label>발주 품목<select required value={form.domesticLineId} onChange={e => update("domesticLineId", e.target.value)}>
+              <option value="">선택</option>{active.purchaseOrder.lines.filter(line => Number(line.receivedQuantity) < Number(line.orderedQuantity))
+                .map(line => <option key={line.purchaseOrderLineId} value={line.purchaseOrderLineId}>{line.productName} · 잔여 {quantity(Number(line.orderedQuantity) - Number(line.receivedQuantity))}</option>)}
+            </select></label>
+            <label>입고번호<input required value={form.receiptNumber} onChange={e => update("receiptNumber", e.target.value)}/></label>
+            <label>입고수량<input required type="number" min="0.000001" step="any" value={form.receiptQuantity} onChange={e => update("receiptQuantity", e.target.value)}/></label>
+            <label>로트번호<input required value={form.lotNumber} onChange={e => update("lotNumber", e.target.value)}/></label>
+            <button disabled={saving} className="button secondary">국내 입고 확정</button>
+          </form>}
 
         {editable && availableAllocations.length > 0 && <form className="panel panel-body cycle-receipt form-grid four" aria-label="입고 처리" onSubmit={submit(receive)}>
           <div className="cycle-form-heading"><h2>3. 입고와 재고 로트</h2><p className="muted">부분 입고도 가능하며 입력 건마다 판매 가능한 재고 로트가 생깁니다.</p></div>

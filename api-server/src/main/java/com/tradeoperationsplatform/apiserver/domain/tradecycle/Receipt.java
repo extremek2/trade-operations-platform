@@ -21,7 +21,8 @@ public class Receipt {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(name = "public_id", nullable = false, unique = true, updatable = false) private UUID publicId;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "organization_id") private Organization organization;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "shipment_case_id") private ShipmentCase shipment;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "shipment_case_id") private ShipmentCase shipment;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "purchase_order_id") private PurchaseOrder purchaseOrder;
     @Column(name = "receipt_number", nullable = false) private String receiptNumber;
     @Column(name = "received_at", nullable = false) private LocalDateTime receivedAt;
     private String notes;
@@ -35,6 +36,17 @@ public class Receipt {
         this.organization = organization;
         this.createdBy = creator;
         this.shipment = shipment;
+        if (receiptNumber == null || receiptNumber.isBlank()) throw new IllegalArgumentException("입고번호는 필수입니다.");
+        this.receiptNumber = receiptNumber.trim();
+        this.receivedAt = receivedAt == null ? LocalDateTime.now() : receivedAt;
+        this.notes = notes == null || notes.isBlank() ? null : notes.trim();
+    }
+    public Receipt(Organization organization, AppUser creator, PurchaseOrder order, String receiptNumber,
+                   LocalDateTime receivedAt, String notes) {
+        this.publicId = UUID.randomUUID();
+        this.organization = organization;
+        this.createdBy = creator;
+        this.purchaseOrder = order;
         if (receiptNumber == null || receiptNumber.isBlank()) throw new IllegalArgumentException("입고번호는 필수입니다.");
         this.receiptNumber = receiptNumber.trim();
         this.receivedAt = receivedAt == null ? LocalDateTime.now() : receivedAt;
