@@ -6,12 +6,14 @@ import java.util.*;
 
 public record BusinessPartnerResponse(UUID businessPartnerId, String name, String countryCode,
                                       String businessNumber, BusinessPartner.Status status,
-                                      Set<BusinessPartner.Role> roles, LocalDateTime createdAt,
+                                      Set<BusinessPartner.Role> roles, String inquiryEmail,
+                                      List<String> inquiryCcEmails, long version, LocalDateTime createdAt,
                                       LocalDateTime updatedAt) {
     public static BusinessPartnerResponse from(BusinessPartner partner) {
         Set<BusinessPartner.Role> roles = partner.getRoles().isEmpty()
                 ? Set.of() : Collections.unmodifiableSet(EnumSet.copyOf(partner.getRoles()));
         return new BusinessPartnerResponse(partner.getPublicId(), partner.getName(), partner.getCountryCode(),
-                partner.getBusinessNumber(), partner.getStatus(), roles, partner.getCreatedAt(), partner.getUpdatedAt());
+                partner.getBusinessNumber(), partner.getStatus(), roles, partner.getInquiryEmail(),
+                List.copyOf(partner.getInquiryCcEmails()), partner.getVersion(), partner.getCreatedAt(), partner.getUpdatedAt());
     }
 }

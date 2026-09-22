@@ -88,7 +88,7 @@ def antiblur(gray):
 
 def parse_tsv(tsv: str) -> dict:
     words = []
-    line_words: dict[tuple[str, str, str, str], list[str]] = {}
+    line_words: dict[tuple[str, str, str, str], list[dict]] = {}
     weighted_confidence = 0.0
     weight = 0
     reader = csv.DictReader(io.StringIO(tsv), delimiter="\t")
@@ -101,7 +101,7 @@ def parse_tsv(tsv: str) -> dict:
         if not value or confidence < 0:
             continue
         key = (row.get("page_num", ""), row.get("block_num", ""), row.get("par_num", ""), row.get("line_num", ""))
-        line_words.setdefault(key, []).append(value)
+        line_words.setdefault(key, []).append({"text": value, "confidence": confidence})
         char_weight = max(1, len(value))
         weighted_confidence += confidence * char_weight
         weight += char_weight
@@ -110,10 +110,16 @@ def parse_tsv(tsv: str) -> dict:
             "left": int(row.get("left", "0")), "top": int(row.get("top", "0")),
             "width": int(row.get("width", "0")), "height": int(row.get("height", "0")),
         })
-    text = "\n".join(" ".join(values) for values in line_words.values())
+    lines = []
+    for values in line_words.values():
+        line_weight = sum(max(1, len(word["text"])) for word in values)
+        line_confidence = sum(word["confidence"] * max(1, len(word["text"])) for word in values) / line_weight
+        lines.append({"text": " ".join(word["text"] for word in values),
+                      "confidence": round(line_confidence, 2)})
+    text = "\n".join(line["text"] for line in lines)
     average = weighted_confidence / weight if weight else 0.0
     quality = average + min(15.0, math.sqrt(max(0, len(text))))
-    return {"text": text, "confidence": round(average, 2), "quality": quality, "words": words}
+    return {"text": text, "confidence": round(average, 2), "quality": quality, "words": words, "lines": lines}
 
 
 def tesseract(image_path: Path) -> dict:
@@ -147,6 +153,7 @@ def ocr_page(source: Path, work: Path, number: int) -> dict:
         "confidence": chosen["confidence"],
         "text": chosen["text"],
         "words": chosen["words"],
+        "lines": chosen["lines"],
     }
 
 

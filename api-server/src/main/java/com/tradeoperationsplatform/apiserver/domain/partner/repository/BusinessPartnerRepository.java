@@ -7,10 +7,10 @@ import org.springframework.data.repository.query.Param;
 import java.util.*;
 
 public interface BusinessPartnerRepository extends JpaRepository<BusinessPartner, Long> {
-    @Query("select distinct p from BusinessPartner p join fetch p.roles where p.ownerOrganization.id=:organizationId order by p.name")
+    @Query("select distinct p from BusinessPartner p join fetch p.roles left join fetch p.inquiryCcEmails where p.ownerOrganization.id=:organizationId order by p.name")
     List<BusinessPartner> findAllOwnedWithRoles(@Param("organizationId") Long organizationId);
 
-    @Query("select distinct p from BusinessPartner p join fetch p.roles where p.publicId=:publicId and p.ownerOrganization.id=:organizationId")
+    @Query("select distinct p from BusinessPartner p join fetch p.roles left join fetch p.inquiryCcEmails where p.publicId=:publicId and p.ownerOrganization.id=:organizationId")
     Optional<BusinessPartner> findOwnedWithRoles(@Param("publicId") UUID publicId,
                                                   @Param("organizationId") Long organizationId);
 

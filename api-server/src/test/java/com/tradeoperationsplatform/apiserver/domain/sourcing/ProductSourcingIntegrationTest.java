@@ -52,6 +52,47 @@ class ProductSourcingIntegrationTest extends PostgresTestSupport {
     }
 
     @Test
+    void supplierInquiryContactsAreScopedValidatedAndEditable() throws Exception {
+        String partnerUrl = "/api/v1/organizations/current/partners";
+        JsonNode supplier = body(call(post(partnerUrl), ownerToken, Map.of(
+                "name", "문의 공급사 " + UUID.randomUUID(), "roles", List.of("SUPPLIER"),
+                "inquiryEmail", " Sales@Example.Test ",
+                "inquiryCcEmails", List.of("Buyer@Example.Test", "Manager@Example.Test")))
+                .andExpect(status().isCreated()));
+        String id = supplier.get("businessPartnerId").asText();
+        assertThat(supplier.get("inquiryEmail").asText()).isEqualTo("sales@example.test");
+        assertThat(supplier.get("inquiryCcEmails").toString()).contains("buyer@example.test", "manager@example.test");
+
+        JsonNode listed = body(call(get(partnerUrl), ownerToken, null).andExpect(status().isOk()));
+        assertThat(listed.toString()).contains("sales@example.test", "buyer@example.test");
+        call(put(partnerUrl + "/" + id + "/inquiry-contacts"), otherToken,
+                Map.of("version", 0, "inquiryEmail", "attacker@example.test"))
+                .andExpect(status().isNotFound());
+
+        String contactsUrl = partnerUrl + "/" + id + "/inquiry-contacts";
+        call(put(contactsUrl), ownerToken, Map.of("version", 0, "inquiryEmail", "sales@example.test",
+                "inquiryCcEmails", List.of("SALES@example.test"))).andExpect(status().isBadRequest());
+        call(put(contactsUrl), ownerToken, Map.of("version", 0,
+                "inquiryCcEmails", List.of("orphan@example.test"))).andExpect(status().isBadRequest());
+        call(put(contactsUrl), ownerToken, Map.of("version", 0,
+                "inquiryEmail", "invalid-address")).andExpect(status().isBadRequest());
+        JsonNode updated = body(call(put(contactsUrl), ownerToken, Map.of("version", 0,
+                "inquiryEmail", "new@example.test", "inquiryCcEmails", List.of("cc@example.test")))
+                .andExpect(status().isOk()));
+        assertThat(updated.get("inquiryEmail").asText()).isEqualTo("new@example.test");
+        assertThat(updated.get("inquiryCcEmails").get(0).asText()).isEqualTo("cc@example.test");
+        assertThat(updated.get("version").asLong()).isEqualTo(1);
+        assertThat(body(call(get(partnerUrl), ownerToken, null).andExpect(status().isOk())).toString())
+                .contains("new@example.test", "cc@example.test");
+        call(put(contactsUrl), ownerToken, Map.of("version", 0, "inquiryEmail", "stale@example.test"))
+                .andExpect(status().isConflict());
+
+        call(post(partnerUrl), ownerToken, Map.of("name", "운송사 " + UUID.randomUUID(),
+                "roles", List.of("FORWARDER"), "inquiryEmail", "forwarder@example.test"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void productCandidateFlowsIntoSupplierQuoteWithoutCreatingAnotherProduct() throws Exception {
         JsonNode product = createProduct(ownerToken, "휴대용 선풍기");
         JsonNode supplier = body(call(post("/api/v1/organizations/current/partners"), ownerToken,

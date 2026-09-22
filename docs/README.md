@@ -1,6 +1,6 @@
 # 프로젝트 문서 안내
 
-- 최종 검토일: 2026-09-15
+- 최종 검토일: 2026-09-22
 - 목적: 제품 범위, 목표 아키텍처, 구현 기록과 운영 적용 상태를 구분한다.
 
 ## 읽는 순서
@@ -52,7 +52,7 @@
 |---|---|
 | [ADR-0001: Core와 Automation 소유권 분리](architecture/ADR-0001-p0-service-and-data-ownership.md) | 승인, 공동 DB 경로 제거 완료 |
 | [ADR-0002: 코어 도메인과 빈 DB 기준선](architecture/ADR-0002-core-domain-and-clean-baseline.md) | 승인, 개발 기준선 적용 완료 |
-| [코어 도메인 실행 계획](architecture/P0_EXECUTION_PLAN.md) | P0~P5 첫 수직 사이클 완료, P6 제안 접수부터 CSV/XLSX 수집·다품목 발주·입고·원가 연결 구현 |
+| [코어 도메인 실행 계획](architecture/P0_EXECUTION_PLAN.md) | P0~P5 첫 수직 사이클 완료, P6 공급 문서 OCR 결과부터 검토 초안·다품목 거래 사이클까지 연결 |
 
 ## 구현·검증 기록
 
@@ -63,6 +63,10 @@
 [P6 세 번째 단계](engineering/supplier-offer-stage-3.md)는 같은 견적의 여러 원가안을 한 발주로 묶고 품목별 선적·입고·원가까지 연결한 구현 기록이다.
 [P6 네 번째 단계](engineering/supplier-offer-stage-4.md)는 합성 CSV/XLSX로 검증한 원본 파일 보존·결정론적 파싱·멱등 재업로드의 구현 기록이다.
 [P6 다섯 번째 단계](engineering/supplier-document-stage-5.md)는 S3 호환 원본 보관, 텍스트 PDF 우선 추출, 스캔 OCR·안티블러와 실패 경계의 구현 기록이다.
+[P6 여섯 번째 단계](engineering/supplier-document-stage-6.md)는 문서 추출 텍스트를 검토 초안의 확인 대기 행으로 연결하고 화면에서 원본을 비교하는 구현 기록이다.
+[P6 일곱 번째 단계](engineering/supplier-document-stage-7.md)는 실패한 문서의 원본 무결성 확인·재추출·시도 이력 조회를 위한 백엔드 구현 기록이다.
+[공급처 상품 문의 초안](engineering/supplier-inquiry-draft.md)은 거래처 문의 주소·참조 등록과 상품별 Gmail 작성 창 연결을 기록한다.
+[공급 문서·파일 변형 검증](engineering/supplier-sample-validation.md)은 합성 샘플의 파서·OCR 확인 결과와 실제 공급처 샘플 대기 상태를 구분한다.
 
 - [1단계: 시스템 권한과 인증 세션](engineering/identity-stage-1.md)
 - [2단계: 조직 개설 신청 백엔드](engineering/identity-stage-2.md)

@@ -25,4 +25,14 @@ public final class SupplierOfferRequests {
                              @Size(max = 1000) String notes) {}
 
     public record Action(@NotNull Long version) {}
+
+    public record ReviewDecision(@NotNull Integer lineNumber, @NotNull Decision decision,
+                                 @Size(max = 500) String reviewedName, @Size(max = 100) String supplierSku,
+                                 @Size(max = 30) String quantityUnit,
+                                 @DecimalMin(value = "0", inclusive = false) BigDecimal minimumQuantity,
+                                 @DecimalMin("0") BigDecimal unitPrice,
+                                 @Pattern(regexp = "[A-Za-z]{2}") String countryOfOrigin,
+                                 @Size(max = 1000) String notes) {}
+    public enum Decision { CONFIRM, EXCLUDE }
+    public record ReviewAll(@NotNull Long version, @NotEmpty List<@Valid ReviewDecision> lines) {}
 }

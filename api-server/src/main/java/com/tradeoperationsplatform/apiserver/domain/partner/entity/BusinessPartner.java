@@ -23,7 +23,13 @@ public class BusinessPartner {
     @Column(nullable = false) private String name;
     @Column(name = "country_code") private String countryCode;
     @Column(name = "business_number") private String businessNumber;
+    @Column(name = "inquiry_email", length = 320) private String inquiryEmail;
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "business_partner_inquiry_cc", joinColumns = @JoinColumn(name = "business_partner_id"))
+    @Column(name = "email", nullable = false, length = 320)
+    private Set<String> inquiryCcEmails = new LinkedHashSet<>();
     @Enumerated(EnumType.STRING) @Column(nullable = false) private Status status;
+    @Version @Column(nullable = false) private long version;
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "business_partner_role", joinColumns = @JoinColumn(name = "business_partner_id"))
     @Enumerated(EnumType.STRING) @Column(name = "partner_role", nullable = false)
@@ -44,6 +50,34 @@ public class BusinessPartner {
 
     public boolean hasRole(Role role) { return roles.contains(role); }
     public void addRole(Role role) { roles.add(Objects.requireNonNull(role)); }
+
+    public void setInquiryContacts(String email, Collection<String> ccEmails) {
+        if (!hasRole(Role.SUPPLIER)) throw new IllegalArgumentException("상품 문의 주소는 공급처에만 등록할 수 있습니다.");
+        String recipient = normalizeEmail(email);
+        Collection<String> requestedCc = ccEmails == null ? List.of() : ccEmails;
+        if (requestedCc.size() > 10) throw new IllegalArgumentException("참조 주소는 최대 10개까지 등록할 수 있습니다.");
+        LinkedHashSet<String> normalizedCc = new LinkedHashSet<>();
+        for (String cc : requestedCc) {
+            String normalized = normalizeEmail(cc);
+            if (normalized == null) throw new IllegalArgumentException("빈 참조 주소는 등록할 수 없습니다.");
+            if (normalized.equals(recipient) || !normalizedCc.add(normalized))
+                throw new IllegalArgumentException("받는 사람과 참조 주소는 중복할 수 없습니다.");
+        }
+        if (recipient == null && !normalizedCc.isEmpty())
+            throw new IllegalArgumentException("참조 주소를 등록하려면 받는 사람 주소가 필요합니다.");
+        this.inquiryEmail = recipient;
+        this.inquiryCcEmails.clear();
+        this.inquiryCcEmails.addAll(normalizedCc);
+    }
+
+    private static String normalizeEmail(String value) {
+        String normalized = blankToNull(value);
+        if (normalized == null) return null;
+        normalized = normalized.toLowerCase(Locale.ROOT);
+        if (normalized.length() > 320 || !normalized.matches("^[^\\s@,;<>]+@[^\\s@,;<>]+\\.[^\\s@,;<>]+$"))
+            throw new IllegalArgumentException("올바른 이메일 주소를 입력해 주세요.");
+        return normalized;
+    }
 
     private static String normalizeCountry(String value) {
         String normalized = blankToNull(value);

@@ -1,0 +1,29 @@
+                               SUPPLIER QUOTATION
+                              공급 상품 제안서 / SUPPLIER OFFER
+
+
+ Supplier / 공급처      TOKYO SAMPLE TRADING               Quote No.        SYN-2026-0919
+
+ Date / 작성일          2026-09-19                         Currency / 통화    JPY
+
+
+
+SKU           상품명 / Product                   MOQ            Unit       Unit Price   Origin
+
+JP-001        스테인리스 텀블러                             24          EA             850       JP
+
+JP-002        보관 파우치                                10          EA             320       CN
+
+JP-003        휴대용 접이식 우산                            12          EA          1,280        JP
+
+JP-004        샘플 진열대                                5          SET          2,400        KR
+
+
+
+Terms: Prices exclude freight. Valid for 30 days. 가격과 MOQ는 발주 전 재확인 바랍니다.
+
+
+
+
+                  SYNTHETIC TEST DOCUMENT - 실제 거래에 사용할 수 없습니다.
+

@@ -63,4 +63,11 @@ public class SupplierOfferController {
                                                        @Valid @RequestBody SupplierOfferRequests.Action request) {
         return ApiResponse.ok(service.confirm(draftId, request));
     }
+
+    @PostMapping("/{draftId}/review")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','OPERATOR')")
+    public ApiResponse<SupplierOfferResponse> reviewAll(@PathVariable UUID draftId,
+                                                         @Valid @RequestBody SupplierOfferRequests.ReviewAll request) {
+        return ApiResponse.ok(service.reviewAll(draftId, request));
+    }
 }

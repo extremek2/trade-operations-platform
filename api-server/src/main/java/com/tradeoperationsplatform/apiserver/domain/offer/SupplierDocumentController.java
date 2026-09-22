@@ -2,6 +2,9 @@ package com.tradeoperationsplatform.apiserver.domain.offer;
 
 import com.tradeoperationsplatform.apiserver.global.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -12,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -27,6 +31,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class SupplierDocumentController {
     private final SupplierDocumentService service;
+    private final SupplierDocumentDraftService draftService;
+
+    public record DraftRequest(@NotBlank @Pattern(regexp = "[A-Za-z]{3}") String currency) {}
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('OWNER','ADMIN','OPERATOR')")
@@ -44,6 +51,26 @@ public class SupplierDocumentController {
     @GetMapping("/{documentId}")
     public ApiResponse<SupplierDocumentResponse> findOne(@PathVariable UUID documentId) {
         return ApiResponse.ok(service.findOne(documentId));
+    }
+
+    @GetMapping("/{documentId}/extractions")
+    public ApiResponse<List<SupplierDocumentExtractionResponse>> extractionHistory(@PathVariable UUID documentId) {
+        return ApiResponse.ok(service.extractionHistory(documentId));
+    }
+
+    @PostMapping("/{documentId}/extractions/retry")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','OPERATOR')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<SupplierDocumentResponse> retryExtraction(@PathVariable UUID documentId) {
+        return ApiResponse.ok("supplier document extraction retried", service.retryExtraction(documentId));
+    }
+
+    @PostMapping("/{documentId}/draft")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','OPERATOR')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<SupplierOfferResponse> createDraft(@PathVariable UUID documentId,
+                                                          @Valid @RequestBody DraftRequest request) {
+        return ApiResponse.ok("supplier document review draft created", draftService.create(documentId, request.currency()));
     }
 
     @GetMapping("/{documentId}/content")

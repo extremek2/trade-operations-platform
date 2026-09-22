@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/organizations/current/partners")
@@ -26,5 +27,12 @@ public class BusinessPartnerController {
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<BusinessPartnerResponse> create(@Valid @RequestBody BusinessPartnerRequests.Create request) {
         return ApiResponse.ok("business partner created", service.create(request));
+    }
+
+    @PutMapping("/{partnerId}/inquiry-contacts")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','OPERATOR')")
+    public ApiResponse<BusinessPartnerResponse> updateInquiryContacts(@PathVariable UUID partnerId,
+            @Valid @RequestBody BusinessPartnerRequests.InquiryContacts request) {
+        return ApiResponse.ok(service.updateInquiryContacts(partnerId, request));
     }
 }

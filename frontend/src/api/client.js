@@ -44,6 +44,23 @@ export async function apiRequest(path, options = {}, retry = true) {
   return payload?.data;
 }
 
+export async function apiBlob(path, retry = true) {
+  const response = await fetch(`${API_URL}${path}`, {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    credentials: "include",
+  });
+  if (response.status === 401 && retry) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return apiBlob(path, false);
+  }
+  if (!response.ok) {
+    if (response.status === 401) applySession(null);
+    const payload = await response.json().catch(() => null);
+    throw new ApiError(payload?.message || "원본 문서를 열지 못했습니다.", response.status);
+  }
+  return response.blob();
+}
+
 export async function confirmEmail(token) {
   // Verification is independent of any other account logged in to this browser.
   const response = await fetch(`${API_URL}/auth/email-verifications/confirm`, {

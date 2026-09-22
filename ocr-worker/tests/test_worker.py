@@ -28,6 +28,9 @@ class OcrWorkerTest(unittest.TestCase):
         self.assertGreater(result["pages"][0]["originalConfidence"], 0)
         self.assertGreater(result["pages"][0]["enhancedConfidence"], 0)
         self.assertTrue(result["pages"][0]["blurDetected"])
+        lines = result["pages"][0]["lines"]
+        self.assertEqual(result["pages"][0]["text"].splitlines(), [line["text"] for line in lines])
+        self.assertTrue(all(0 <= line["confidence"] <= 100 for line in lines))
 
     def test_rejects_unknown_binary_and_oversize(self):
         with self.assertRaisesRegex(SERVER.ExtractionError, "PDF, PNG 또는 JPEG"):

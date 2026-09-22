@@ -157,6 +157,37 @@ public class SupplierOfferService {
         } catch (IllegalStateException e) { throw new BusinessException(e.getMessage()); }
     }
 
+    @Transactional
+    public SupplierOfferResponse reviewAll(UUID draftId, SupplierOfferRequests.ReviewAll request) {
+        SupplierOfferDraft draft = require(draftId);
+        checkVersion(draft, request.version());
+        if (draft.getStatus() != SupplierOfferDraft.Status.REVIEW_REQUIRED)
+            throw new BusinessException("이미 확인된 초안입니다.");
+        Map<Integer, SupplierOfferRequests.ReviewDecision> decisions = new HashMap<>();
+        for (var decision : request.lines()) {
+            if (decisions.putIfAbsent(decision.lineNumber(), decision) != null)
+                throw new BusinessException("같은 행을 중복 제출할 수 없습니다.");
+        }
+        if (decisions.size() != draft.getLines().size()
+                || draft.getLines().stream().anyMatch(line -> !decisions.containsKey(line.getLineNumber())))
+            throw new BusinessException("모든 원본 행의 검토 결과가 필요합니다.");
+        try {
+            var actor = currentActor.require().user();
+            for (SupplierOfferDraftLine line : draft.getLines()) {
+                var decision = decisions.get(line.getLineNumber());
+                if (decision.decision() == SupplierOfferRequests.Decision.EXCLUDE) line.exclude();
+                else line.review(decision.reviewedName(), decision.supplierSku(), decision.quantityUnit(),
+                        decision.minimumQuantity(), decision.unitPrice(), decision.countryOfOrigin(), decision.notes());
+                line.reviewedBy(actor);
+            }
+            draft.confirm();
+            drafts.flush();
+            return SupplierOfferResponse.from(draft);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new BusinessException(e.getMessage());
+        }
+    }
+
     private SupplierOfferDraft require(UUID draftId) {
         Long organizationId = currentActor.require().organization().getId();
         return drafts.findByPublicIdAndOrganizationId(draftId, organizationId)

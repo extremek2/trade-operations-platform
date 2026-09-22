@@ -49,3 +49,12 @@ test("FormData 요청은 브라우저가 multipart boundary를 설정하도록 C
   await apiRequest("/supplier-offer-drafts/import", { method: "POST", body });
   expect(global.fetch.mock.calls[0][1].headers["Content-Type"]).toBeUndefined();
 });
+
+test("문서 원본은 인증 헤더를 사용해 바이너리로 받는다", async () => {
+  const { apiBlob, setAccessToken } = require("./client");
+  const document = new Blob(["%PDF-test"], { type: "application/pdf" });
+  setAccessToken("document-token");
+  jest.spyOn(global, "fetch").mockResolvedValue({ ok: true, status: 200, blob: async () => document });
+  expect(await apiBlob("/supplier-documents/document-1/content")).toBe(document);
+  expect(global.fetch.mock.calls[0][1].headers.Authorization).toBe("Bearer document-token");
+});

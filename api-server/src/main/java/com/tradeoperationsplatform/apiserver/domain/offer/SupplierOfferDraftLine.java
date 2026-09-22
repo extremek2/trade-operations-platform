@@ -31,6 +31,7 @@ public class SupplierOfferDraftLine {
     @Column(name = "country_of_origin", length = 2) private String countryOfOrigin;
     @Column(name = "notes") private String notes;
     @Column(name = "extraction_errors") private String extractionErrors;
+    @Column(name = "extraction_confidence", precision = 5, scale = 2) private BigDecimal extractionConfidence;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private Status status;
     @Column(name = "reviewed_at") private LocalDateTime reviewedAt;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "reviewed_by") private AppUser reviewedBy;
@@ -88,6 +89,8 @@ public class SupplierOfferDraftLine {
     }
 
     public void reviewedBy(AppUser actor) { this.reviewedBy = actor; }
+
+    public void extractionConfidence(BigDecimal confidence) { this.extractionConfidence = confidence; }
 
     private void ensureEditable() {
         if (draft.getStatus() != SupplierOfferDraft.Status.REVIEW_REQUIRED)

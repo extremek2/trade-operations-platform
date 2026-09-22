@@ -113,19 +113,55 @@ public class SupplierDocumentService {
     public SupplierDocumentResponse findOne(UUID documentId) { return response(require(documentId)); }
 
     @Transactional(readOnly = true)
+    public List<SupplierDocumentExtractionResponse> extractionHistory(UUID documentId) {
+        SourceArtifact artifact = require(documentId);
+        return runs.findAllBySourceArtifactIdOrderByIdDesc(artifact.getId()).stream()
+                .map(SupplierDocumentExtractionResponse::from).toList();
+    }
+
+    @Transactional
+    public SupplierDocumentResponse retryExtraction(UUID documentId) {
+        SourceArtifact artifact = requireForUpdate(documentId);
+        ExtractionRun previous = runs.findTopBySourceArtifactIdOrderByIdDesc(artifact.getId())
+                .orElseThrow(() -> new ConflictException("문서에 연결된 추출 이력을 찾을 수 없습니다."));
+        if (previous.getStatus() != ExtractionRun.Status.FAILED)
+            throw new ConflictException("실패한 문서 추출만 재시도할 수 있습니다.");
+        if (!objectStore.isEnabled() || !extractionGateway.isEnabled())
+            throw unavailable("문서 저장소 또는 OCR 연결이 비활성화되어 있습니다.");
+        byte[] content = verifiedContent(artifact);
+        ExtractionRun run = runs.saveAndFlush(new ExtractionRun(artifact, true));
+        run.start();
+        runs.flush();
+        try {
+            DocumentExtractionGateway.Result result = extractionGateway.extract(content,
+                    artifact.getOriginalFileName(), artifact.getContentType());
+            run.succeed(result.method(), result.engineVersion(), result.text(), result.confidence(),
+                    result.pageCount(), result.preprocessingApplied(), result.reviewRequired(), result.rawPayload());
+        } catch (DocumentExtractionException e) {
+            run.fail(limit(e.getMessage(), 2000));
+        }
+        runs.flush();
+        return SupplierDocumentResponse.from(artifact, run);
+    }
+
+    @Transactional(readOnly = true)
     public Download download(UUID documentId) {
         SourceArtifact artifact = require(documentId);
+        return new Download(artifact.getOriginalFileName(), artifact.getContentType(), verifiedContent(artifact));
+    }
+
+    private byte[] verifiedContent(SourceArtifact artifact) {
         if (!objectStore.isEnabled()) throw unavailable("문서 저장소가 비활성화되어 있습니다.");
         final byte[] content;
         try { content = objectStore.get(artifact.getObjectKey()); }
         catch (ObjectStorageException e) { throw unavailable(e.getMessage()); }
         if (content.length != artifact.getFileSize() || !sha256(content).equals(artifact.getContentHash()))
             throw unavailable("보관된 문서의 무결성 검증에 실패했습니다.");
-        return new Download(artifact.getOriginalFileName(), artifact.getContentType(), content);
+        return content;
     }
 
     private SupplierDocumentResponse response(SourceArtifact artifact) {
-        ExtractionRun run = runs.findTopBySourceArtifactIdOrderByCreatedAtDesc(artifact.getId())
+        ExtractionRun run = runs.findTopBySourceArtifactIdOrderByIdDesc(artifact.getId())
                 .orElseThrow(() -> new ConflictException("문서에 연결된 추출 이력을 찾을 수 없습니다."));
         return SupplierDocumentResponse.from(artifact, run);
     }
@@ -133,6 +169,15 @@ public class SupplierDocumentService {
     private SourceArtifact require(UUID documentId) {
         Long organizationId = currentActor.require().organization().getId();
         SourceArtifact artifact = artifacts.findByPublicIdAndOrganizationId(documentId, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("공급 문서를 찾을 수 없습니다."));
+        if (!DOCUMENT_TYPES.contains(artifact.getSourceType()))
+            throw new ResourceNotFoundException("공급 문서를 찾을 수 없습니다.");
+        return artifact;
+    }
+
+    private SourceArtifact requireForUpdate(UUID documentId) {
+        Long organizationId = currentActor.require().organization().getId();
+        SourceArtifact artifact = artifacts.findDocumentForUpdate(documentId, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("공급 문서를 찾을 수 없습니다."));
         if (!DOCUMENT_TYPES.contains(artifact.getSourceType()))
             throw new ResourceNotFoundException("공급 문서를 찾을 수 없습니다.");

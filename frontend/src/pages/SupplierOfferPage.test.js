@@ -1,15 +1,19 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { getBusinessPartners } from "../api/partnerApi";
 import { getProducts } from "../api/productApi";
-import { createPurchaseSelection, createSupplierOfferDraft, getPurchaseSelections, getSupplierOfferDrafts, importSupplierOfferFile } from "../api/supplierOfferApi";
+import { createDocumentDraft, createPurchaseSelection, createSupplierOfferDraft, getPurchaseSelections,
+  getSupplierDocuments, getSupplierOfferDrafts, importSupplierDocument, importSupplierOfferFile } from "../api/supplierOfferApi";
+import { getSupplierDocumentContent, reviewSupplierOfferDraft } from "../api/supplierOfferApi";
 import SupplierOfferPage from "./SupplierOfferPage";
 
 jest.mock("../api/partnerApi", () => ({ getBusinessPartners: jest.fn() }));
 jest.mock("../api/productApi", () => ({ getProducts: jest.fn() }));
 jest.mock("../api/supplierOfferApi", () => ({
-  confirmSupplierOfferDraft: jest.fn(), createPurchaseSelection: jest.fn(),
+  confirmSupplierOfferDraft: jest.fn(), createDocumentDraft: jest.fn(), createPurchaseSelection: jest.fn(),
   createSupplierOfferDraft: jest.fn(), excludeSupplierOfferLine: jest.fn(),
-  getPurchaseSelections: jest.fn(), getSupplierOfferDrafts: jest.fn(), importSupplierOfferFile: jest.fn(), reviewSupplierOfferLine: jest.fn(),
+  getPurchaseSelections: jest.fn(), getSupplierDocuments: jest.fn(), getSupplierDocumentContent: jest.fn(),
+  getSupplierOfferDrafts: jest.fn(), importSupplierDocument: jest.fn(), importSupplierOfferFile: jest.fn(), reviewSupplierOfferLine: jest.fn(),
+  reviewSupplierOfferDraft: jest.fn(),
 }));
 jest.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { role: "OWNER" } }) }));
 
@@ -28,10 +32,80 @@ beforeEach(() => {
   getBusinessPartners.mockResolvedValue([{ businessPartnerId: "supplier-1", name: "오사카 공급처", roles: ["SUPPLIER"] }]);
   getProducts.mockResolvedValue([]);
   getSupplierOfferDrafts.mockResolvedValue([draft]);
+  getSupplierDocuments.mockResolvedValue([]);
   getPurchaseSelections.mockResolvedValue([]);
   createPurchaseSelection.mockResolvedValue({});
   createSupplierOfferDraft.mockResolvedValue({});
   importSupplierOfferFile.mockResolvedValue({});
+  importSupplierDocument.mockResolvedValue({});
+  createDocumentDraft.mockResolvedValue({});
+  getSupplierDocumentContent.mockResolvedValue(new Blob(["%PDF-sample"], { type: "application/pdf" }));
+  reviewSupplierOfferDraft.mockResolvedValue({});
+  URL.createObjectURL = jest.fn(() => "blob:document-preview");
+  URL.revokeObjectURL = jest.fn();
+});
+
+test("문서 품목의 불확실한 수량을 수정하고 대조한 뒤 한 번에 확인한다", async () => {
+  getSupplierDocuments.mockResolvedValue([{ documentId: "doc-1", originalFileName: "sample.pdf",
+    sourceType: "PDF", extractionStatus: "SUCCEEDED", confidence: 82 }]);
+  getSupplierOfferDrafts.mockResolvedValue([{ ...draft, draftId: "document-draft", sourceArtifactId: "doc-1",
+    sourceType: "PDF", originalFileName: "sample.pdf", extractionMethod: "OCR", status: "REVIEW_REQUIRED", version: 0,
+    lines: [
+      { lineNumber: 1, originalName: "JP-001 텀블러 1O EA 280 JP", sourceLocation: "텍스트 1행",
+        reviewedName: "텀블러", supplierSku: "JP-001", minimumQuantity: 10, quantityUnit: "EA", unitPrice: 280,
+        countryOfOrigin: "JP", extractionConfidence: 72.5, status: "PENDING" },
+      { lineNumber: 2, originalName: "배송 조건", sourceLocation: "텍스트 2행", status: "PENDING" },
+    ] }]);
+  render(<SupplierOfferPage navigate={jest.fn()}/>);
+  const form = await screen.findByRole("form", { name: "오사카 공급처 문서 검토" });
+  expect(within(form).getByText("원본 대조 필요 · 72.5%")).toBeInTheDocument();
+  expect(within(form).queryByRole("checkbox", { name: "행 2" })).not.toBeInTheDocument();
+  fireEvent.click(within(form).getByRole("button", { name: "상품 외 문구 1행 보기" }));
+  expect(within(form).getByRole("checkbox", { name: "행 2" })).not.toBeChecked();
+  const next = within(form).getByRole("button", { name: "검토 완료하고 구매 후보 선택으로" });
+  expect(next).toBeDisabled();
+  fireEvent.change(within(form).getByLabelText("행 1 수량"), { target: { value: "24" } });
+  fireEvent.click(within(form).getByRole("checkbox", { name: "행 1 대조 완료" }));
+  expect(next).toBeEnabled();
+  fireEvent.click(next);
+  await waitFor(() => expect(reviewSupplierOfferDraft).toHaveBeenCalledWith("document-draft", {
+    version: 0, lines: [
+      expect.objectContaining({ lineNumber: 1, decision: "CONFIRM", minimumQuantity: 24, quantityUnit: "EA" }),
+      { lineNumber: 2, decision: "EXCLUDE" },
+    ],
+  }));
+  expect(getSupplierDocumentContent).toHaveBeenCalledWith("doc-1");
+});
+
+test("문서 검토 완료 후 같은 문서 카드에서 구매 후보를 선택한다", async () => {
+  getSupplierDocuments.mockResolvedValue([{ documentId: "doc-1", originalFileName: "sample.pdf",
+    sourceType: "PDF", extractionStatus: "SUCCEEDED" }]);
+  getSupplierOfferDrafts.mockResolvedValue([{ ...draft, sourceType: "PDF", sourceArtifactId: "doc-1",
+    originalFileName: "sample.pdf" }]);
+  render(<SupplierOfferPage navigate={jest.fn()}/>);
+  const documentCard = (await screen.findByText("다음 단계 · 구매 후보 선택")).closest("article");
+  expect(within(documentCard).getByRole("form", { name: "오사카 공급처 구매 품목 선택" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "제안 검토 원장" })).not.toBeInTheDocument();
+});
+
+test("PDF 문서를 보관하고 추출 결과로 검토 초안을 만든다", async () => {
+  const document = { documentId: "document-1", originalFileName: "quotation.pdf", sourceType: "PDF",
+    extractionStatus: "SUCCEEDED", extractedText: "JP-001 스테인리스 텀블러", confidence: 100 };
+  getSupplierDocuments.mockResolvedValue([document]);
+  render(<SupplierOfferPage navigate={jest.fn()}/>);
+
+  const form = await screen.findByRole("form", { name: "공급 문서 가져오기" });
+  const file = new File(["%PDF-test"], "quotation.pdf", { type: "application/pdf" });
+  fireEvent.change(within(form).getByLabelText("공급처"), { target: { value: "supplier-1" } });
+  fireEvent.change(within(form).getByLabelText(/문서 파일/), { target: { files: [file] } });
+  fireEvent.click(within(form).getByRole("button", { name: "원본 보관하고 텍스트 추출" }));
+  await waitFor(() => expect(importSupplierDocument).toHaveBeenCalledWith({
+    supplierId: "supplier-1", sourceReference: undefined, file,
+  }));
+  expect(screen.getByText("JP-001 스테인리스 텀블러")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("quotation.pdf 통화"), { target: { value: "usd" } });
+  fireEvent.click(screen.getByRole("button", { name: "문서 검토 초안 만들기" }));
+  await waitFor(() => expect(createDocumentDraft).toHaveBeenCalledWith("document-1", "USD"));
 });
 
 test("CSV/XLSX 파일과 기본 메타데이터를 가져오기 API에 보낸다", async () => {
