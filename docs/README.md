@@ -1,6 +1,6 @@
 # 프로젝트 문서 안내
 
-- 최종 검토일: 2026-09-22
+- 최종 검토일: 2026-10-10
 - 목적: 제품 범위, 목표 아키텍처, 구현 기록과 운영 적용 상태를 구분한다.
 
 ## 읽는 순서
@@ -39,6 +39,7 @@
 | [무역 운영 도메인 v1](product/trade-operations-domain-v1.md) | PI·CI·송금·FTA·선적·통관 도메인 기준 | PRD 입력용 초안 |
 | [국내 판매 상품 검증 v1](product/domestic-product-validation-module-v1.md) | 국내 판매 검증의 입력·계산·판정 세부안 | 통합 로드맵에 의해 범위·순서 일부 대체됨 |
 | [가입 승인 및 참여 권한 v1](product/identity-access-approval-design-v1.md) | 계정·조직·외부 참여 권한 계약 | 1~5단계 구현 완료, 운영 적용 대기 |
+| [도매 사이트 기반 발주 MVP](product/wholesale-procurement-mvp-feasibility.md) | 도매 카탈로그 조회부터 국내 매입·입고까지의 범위와 실제 검증 기준 | 샘플 수직 흐름 구현 완료, 라이브 API 실증 대기 |
 
 ## IR 문서
 
@@ -67,6 +68,7 @@
 [P6 일곱 번째 단계](engineering/supplier-document-stage-7.md)는 실패한 문서의 원본 무결성 확인·재추출·시도 이력 조회를 위한 백엔드 구현 기록이다.
 [공급처 상품 문의 초안](engineering/supplier-inquiry-draft.md)은 거래처 문의 주소·참조 등록과 상품별 Gmail 작성 창 연결을 기록한다.
 [공급 문서·파일 변형 검증](engineering/supplier-sample-validation.md)은 합성 샘플의 파서·OCR 확인 결과와 실제 공급처 샘플 대기 상태를 구분한다.
+[도매 카탈로그·국내 매입 작업 인계](engineering/wholesale-procurement-handoff.md)는 2026-10-10 중단 시점의 완료 커밋, 검증 결과, 미검증 경계와 재개 순서를 기록한다.
 
 - [1단계: 시스템 권한과 인증 세션](engineering/identity-stage-1.md)
 - [2단계: 조직 개설 신청 백엔드](engineering/identity-stage-2.md)
