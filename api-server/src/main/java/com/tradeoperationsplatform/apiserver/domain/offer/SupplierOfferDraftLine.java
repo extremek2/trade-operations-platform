@@ -26,6 +26,7 @@ public class SupplierOfferDraftLine {
     @Column(name = "source_location") private String sourceLocation;
     @Column(name = "reviewed_name") private String reviewedName;
     @Column(name = "supplier_sku") private String supplierSku;
+    @Column(name = "source_item_id", length = 100) private String sourceItemId;
     @Column(name = "quantity_unit") private String quantityUnit;
     @Column(name = "minimum_quantity", precision = 19, scale = 6) private BigDecimal minimumQuantity;
     @Column(name = "available_quantity", precision = 19, scale = 6) private BigDecimal availableQuantity;
@@ -101,6 +102,13 @@ public class SupplierOfferDraftLine {
         ensureEditable();
         if (quantity != null && quantity < 0) throw new IllegalArgumentException("재고는 음수일 수 없습니다.");
         this.availableQuantity = quantity == null ? null : BigDecimal.valueOf(quantity);
+    }
+
+    public void sourceItemId(String sourceItemId) {
+        ensureEditable();
+        if (sourceItemId == null || sourceItemId.isBlank())
+            throw new IllegalArgumentException("원본 상품 ID는 필수입니다.");
+        this.sourceItemId = sourceItemId.trim();
     }
 
     public void priceTiers(List<WholesalePriceTier> tiers) {

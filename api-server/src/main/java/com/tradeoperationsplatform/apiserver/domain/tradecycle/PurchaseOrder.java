@@ -25,6 +25,7 @@ public class PurchaseOrder {
     public enum PaymentStatus { UNPAID, PARTIALLY_PAID, PAID }
     public enum ProcurementRoute { IMPORT, DOMESTIC_STOCK }
     public enum ExternalOrderStatus { NOT_PLACED, PLACED }
+    public enum CatalogRecheckStatus { NOT_REQUIRED, REQUIRED, PASSED, CHANGED, FAILED }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(name = "public_id", nullable = false, unique = true, updatable = false) private UUID publicId;
@@ -37,6 +38,10 @@ public class PurchaseOrder {
     @Column(name = "external_order_reference", length = 200) private String externalOrderReference;
     @Column(name = "external_order_total", precision = 19, scale = 4) private BigDecimal externalOrderTotal;
     @Column(name = "external_ordered_at") private LocalDate externalOrderedAt;
+    @Enumerated(EnumType.STRING) @Column(name = "catalog_recheck_status", nullable = false)
+    private CatalogRecheckStatus catalogRecheckStatus;
+    @Column(name = "catalog_rechecked_at") private LocalDateTime catalogRecheckedAt;
+    @Column(name = "catalog_recheck_message", length = 2000) private String catalogRecheckMessage;
     @Enumerated(EnumType.STRING) @Column(name = "payment_status", nullable = false) private PaymentStatus paymentStatus;
     @Column(name = "paid_amount", nullable = false, precision = 19, scale = 4) private BigDecimal paidAmount;
     @Column(name = "paid_at") private LocalDate paidAt;
@@ -86,6 +91,7 @@ public class PurchaseOrder {
         if (this.procurementRoute == ProcurementRoute.DOMESTIC_STOCK && !"KRW".equals(first.getQuoteCurrency()))
             throw new IllegalArgumentException("국내 재고 매입은 KRW 견적만 사용할 수 있습니다.");
         this.externalOrderStatus = ExternalOrderStatus.NOT_PLACED;
+        this.catalogRecheckStatus = CatalogRecheckStatus.NOT_REQUIRED;
         this.paymentStatus = PaymentStatus.UNPAID;
         this.paidAmount = BigDecimal.ZERO;
         this.currency = first.getQuoteCurrency();
@@ -100,8 +106,34 @@ public class PurchaseOrder {
 
     public void addLine(PurchaseOrderLine line) { lines.add(line); }
 
+    public void requireCatalogRecheck() {
+        if (procurementRoute != ProcurementRoute.DOMESTIC_STOCK)
+            throw new IllegalStateException("국내 재고 매입만 도매 상품을 재확인할 수 있습니다.");
+        catalogRecheckStatus = CatalogRecheckStatus.REQUIRED;
+    }
+
+    public void recordCatalogRecheck(CatalogRecheckStatus result, String message) {
+        if (catalogRecheckStatus == CatalogRecheckStatus.NOT_REQUIRED)
+            throw new IllegalStateException("재확인 대상인 도매 상품이 없습니다.");
+        if (externalOrderStatus == ExternalOrderStatus.PLACED)
+            throw new IllegalStateException("외부 주문 기록 후에는 가격·재고를 재확인할 수 없습니다.");
+        if (result != CatalogRecheckStatus.PASSED && result != CatalogRecheckStatus.CHANGED
+                && result != CatalogRecheckStatus.FAILED)
+            throw new IllegalArgumentException("재확인 결과가 올바르지 않습니다.");
+        catalogRecheckStatus = result;
+        catalogRecheckedAt = LocalDateTime.now();
+        catalogRecheckMessage = trimToNull(message);
+        if (result != CatalogRecheckStatus.PASSED && status == Status.APPROVED) {
+            status = Status.DRAFT;
+            approvedAt = null;
+        }
+    }
+
     public void approve() {
         if (status != Status.DRAFT) throw new IllegalStateException("초안 발주만 승인할 수 있습니다.");
+        if (catalogRecheckStatus != CatalogRecheckStatus.NOT_REQUIRED
+                && catalogRecheckStatus != CatalogRecheckStatus.PASSED)
+            throw new IllegalStateException("도매 상품의 가격·재고 재확인을 통과해야 발주를 승인할 수 있습니다.");
         status = Status.APPROVED;
         approvedAt = LocalDateTime.now();
     }
@@ -113,6 +145,10 @@ public class PurchaseOrder {
             throw new IllegalArgumentException("외부 주문번호는 1~200자로 입력해 주세요.");
         if (total == null || total.signum() < 0) throw new IllegalArgumentException("외부 주문금액이 올바르지 않습니다.");
         if (date == null) throw new IllegalArgumentException("외부 주문일이 필요합니다.");
+        if (catalogRecheckStatus != CatalogRecheckStatus.NOT_REQUIRED
+                && (catalogRecheckStatus != CatalogRecheckStatus.PASSED || catalogRecheckedAt == null
+                || catalogRecheckedAt.isBefore(LocalDateTime.now().minusMinutes(30))))
+            throw new IllegalStateException("외부 주문 직전 30분 이내의 가격·재고 재확인이 필요합니다.");
         this.externalOrderReference = reference.trim();
         this.externalOrderTotal = total;
         this.externalOrderedAt = date;

@@ -1,13 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { getCostScenarios } from "../api/costingApi";
 import { getShipments } from "../api/shipmentApi";
-import { approvePurchaseOrder, createPurchaseOrder, getTradeCycles } from "../api/tradeCycleApi";
+import { approvePurchaseOrder, createPurchaseOrder, getTradeCycles, recheckWholesaleCatalog } from "../api/tradeCycleApi";
 import TradeCyclePage from "./TradeCyclePage";
 
 jest.mock("../api/costingApi", () => ({ getCostScenarios: jest.fn() }));
 jest.mock("../api/shipmentApi", () => ({ getShipments: jest.fn() }));
 jest.mock("../api/tradeCycleApi", () => ({
   getTradeCycles: jest.fn(), createPurchaseOrder: jest.fn(), approvePurchaseOrder: jest.fn(),
+  recheckWholesaleCatalog: jest.fn(),
   cancelPurchaseOrder: jest.fn(), recordPurchasePayment: jest.fn(), allocateShipment: jest.fn(),
   createReceipt: jest.fn(), createDomesticReceipt: jest.fn(), recordExternalOrder: jest.fn(),
   addActualCost: jest.fn(), closeActualCost: jest.fn(),
@@ -26,6 +27,7 @@ const cycle = status => ({
   purchaseOrder: {
     purchaseOrderId: "order-1", orderNumber: "PO-001", status, paymentStatus: "UNPAID", paidAmount: 0,
     currency: "KRW", supplierName: "선전 공급사", expectedTotalCostKrw: 110000, version: status === "DRAFT" ? 0 : 1,
+    procurementRoute: "IMPORT", externalOrderStatus: "NOT_PLACED", catalogRecheckStatus: "NOT_REQUIRED",
     lines: [{ purchaseOrderLineId: "line-1", productName: "휴대용 선풍기", orderedQuantity: 10,
       shippedQuantity: 0, receivedQuantity: 0, quantityUnit: "EA", unitPrice: 10000 }],
   },
@@ -40,6 +42,28 @@ beforeEach(() => {
   getTradeCycles.mockResolvedValue([cycle("DRAFT")]);
   createPurchaseOrder.mockResolvedValue(cycle("DRAFT"));
   approvePurchaseOrder.mockResolvedValue(cycle("APPROVED"));
+  recheckWholesaleCatalog.mockResolvedValue(cycle("DRAFT"));
+});
+
+test("도매 API 출처 발주는 가격·재고 재확인 후 승인한다", async () => {
+  const required = cycle("DRAFT");
+  required.purchaseOrder.procurementRoute = "DOMESTIC_STOCK";
+  required.purchaseOrder.catalogRecheckStatus = "REQUIRED";
+  const passed = cycle("DRAFT");
+  passed.purchaseOrder.procurementRoute = "DOMESTIC_STOCK";
+  passed.purchaseOrder.catalogRecheckStatus = "PASSED";
+  passed.purchaseOrder.catalogRecheckMessage = "발주 수량의 가격·재고가 승인 기준과 일치합니다.";
+  passed.purchaseOrder.version = 1;
+  getTradeCycles.mockResolvedValue([required]);
+  recheckWholesaleCatalog.mockResolvedValue(passed);
+
+  render(<TradeCyclePage navigate={jest.fn()}/>);
+  const approve = await screen.findByRole("button", { name: "발주 승인" });
+  expect(approve).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "가격·재고 재확인" }));
+  await waitFor(() => expect(recheckWholesaleCatalog).toHaveBeenCalledWith("order-1", 0));
+  expect(await screen.findByText("발주 수량의 가격·재고가 승인 기준과 일치합니다.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "발주 승인" })).toBeEnabled();
 });
 
 test("같은 견적의 완성 원가안 여러 개로 발주를 만들고 초안을 승인한다", async () => {

@@ -16,6 +16,9 @@ export const recordPurchasePayment = (orderId, payload) => apiRequest(`/trade-cy
 export const recordExternalOrder = (orderId, payload) => apiRequest(`/trade-cycles/purchase-orders/${orderId}/external-order`, {
   method: "POST", body: JSON.stringify(payload),
 });
+export const recheckWholesaleCatalog = (orderId, version) => apiRequest(`/trade-cycles/purchase-orders/${orderId}/catalog-recheck`, {
+  method: "POST", body: JSON.stringify({ version }),
+});
 export const allocateShipment = payload => apiRequest("/trade-cycles/shipment-allocations", {
   method: "POST", body: JSON.stringify(payload),
 });

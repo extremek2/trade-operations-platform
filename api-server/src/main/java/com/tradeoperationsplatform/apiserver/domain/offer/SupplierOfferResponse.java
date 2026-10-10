@@ -14,7 +14,7 @@ public record SupplierOfferResponse(UUID draftId, UUID sourceArtifactId, UUID ex
                                     SupplierOfferDraft.Status status, long version, LocalDateTime createdAt,
                                     List<Line> lines) {
     public record Line(int lineNumber, String originalName, String sourceLocation, String reviewedName,
-                       String supplierSku, String quantityUnit, BigDecimal minimumQuantity,
+                       String supplierSku, String sourceItemId, String quantityUnit, BigDecimal minimumQuantity,
                        BigDecimal availableQuantity, BigDecimal unitPrice, List<WholesalePriceTier> priceTiers,
                        String countryOfOrigin, String notes,
                        String extractionErrors, BigDecimal extractionConfidence,
@@ -31,7 +31,7 @@ public record SupplierOfferResponse(UUID draftId, UUID sourceArtifactId, UUID ex
                 draft.getExtractionRun().getConfidence(), draft.getCurrency(), draft.getStatus(), draft.getVersion(),
                 draft.getCreatedAt(), draft.getLines().stream().map(line -> new Line(line.getLineNumber(),
                         line.getOriginalName(), line.getSourceLocation(), line.getReviewedName(),
-                        line.getSupplierSku(), line.getQuantityUnit(), line.getMinimumQuantity(),
+                        line.getSupplierSku(), line.getSourceItemId(), line.getQuantityUnit(), line.getMinimumQuantity(),
                         line.getAvailableQuantity(), line.getUnitPrice(), line.getPriceTiers().stream().map(tier -> new WholesalePriceTier(
                                 tier.getMinimumQuantity(), tier.getUnitPrice())).toList(),
                         line.getCountryOfOrigin(), line.getNotes(), line.getExtractionErrors(),

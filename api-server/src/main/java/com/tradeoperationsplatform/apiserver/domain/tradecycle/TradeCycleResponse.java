@@ -24,12 +24,15 @@ public record TradeCycleResponse(
             LocalDateTime createdAt, List<LineView> lines,
             PurchaseOrder.ProcurementRoute procurementRoute,
             PurchaseOrder.ExternalOrderStatus externalOrderStatus,
-            String externalOrderReference, BigDecimal externalOrderTotal, LocalDate externalOrderedAt
+            String externalOrderReference, BigDecimal externalOrderTotal, LocalDate externalOrderedAt,
+            PurchaseOrder.CatalogRecheckStatus catalogRecheckStatus,
+            LocalDateTime catalogRecheckedAt, String catalogRecheckMessage
     ) {}
     public record LineView(
             UUID purchaseOrderLineId, UUID costScenarioId, UUID productId, String productName, String internalSku,
             BigDecimal orderedQuantity, BigDecimal shippedQuantity, BigDecimal receivedQuantity,
-            String quantityUnit, BigDecimal unitPrice
+            String quantityUnit, BigDecimal unitPrice, String sourcePlatform, String sourceItemId,
+            String sourceReference, LocalDateTime sourceFetchedAt
     ) {}
     public record AllocationView(
             UUID allocationId, UUID shipmentId, String shipmentCaseNumber, UUID purchaseOrderLineId,

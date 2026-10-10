@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
@@ -26,6 +27,10 @@ public class PurchaseOrderLine {
     @Column(name = "ordered_quantity", nullable = false, precision = 19, scale = 6) private BigDecimal orderedQuantity;
     @Column(name = "quantity_unit", nullable = false) private String quantityUnit;
     @Column(name = "unit_price", nullable = false, precision = 19, scale = 4) private BigDecimal unitPrice;
+    @Column(name = "source_platform", length = 50) private String sourcePlatform;
+    @Column(name = "source_item_id", length = 100) private String sourceItemId;
+    @Column(name = "source_reference") private String sourceReference;
+    @Column(name = "source_fetched_at") private LocalDateTime sourceFetchedAt;
 
     public PurchaseOrderLine(PurchaseOrder order, CostScenario scenario, int lineNumber, String quantityUnit) {
         if (lineNumber < 1) throw new IllegalArgumentException("발주 행 번호는 양수여야 합니다.");
@@ -39,5 +44,15 @@ public class PurchaseOrderLine {
         this.orderedQuantity = scenario.getOrderQuantity();
         this.quantityUnit = quantityUnit == null || quantityUnit.isBlank() ? "EA" : quantityUnit.trim();
         this.unitPrice = scenario.getQuotedUnitPrice();
+    }
+
+    public void catalogSource(String platform, String itemId, String reference, LocalDateTime fetchedAt) {
+        if (platform == null || platform.isBlank() || itemId == null || itemId.isBlank()
+                || reference == null || reference.isBlank() || fetchedAt == null)
+            throw new IllegalArgumentException("도매 상품 출처 정보가 부족합니다.");
+        sourcePlatform = platform.trim();
+        sourceItemId = itemId.trim();
+        sourceReference = reference.trim();
+        sourceFetchedAt = fetchedAt;
     }
 }

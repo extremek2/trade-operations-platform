@@ -5,6 +5,7 @@ import {
   addActualCost, addReorderDecision, addSalesObservation, allocateShipment,
   approvePurchaseOrder, cancelPurchaseOrder, closeActualCost, createPurchaseOrder,
   createReceipt, createDomesticReceipt, getTradeCycles, recordPurchasePayment, recordExternalOrder,
+  recheckWholesaleCatalog,
 } from "../api/tradeCycleApi";
 import { EmptyState, ErrorMessage, LoadingState } from "../components/Feedback";
 import StatusBadge from "../components/StatusBadge";
@@ -100,6 +101,8 @@ export default function TradeCyclePage({ navigate }) {
     version: active.purchaseOrder.version, externalOrderReference: form.externalOrderReference,
     totalAmount: toNumber(form.externalTotalAmount), orderedAt: form.externalOrderedAt,
   }), { externalOrderReference: "", externalTotalAmount: "", externalOrderedAt: "" });
+  const recheckCatalog = () => perform(() => recheckWholesaleCatalog(
+    active.purchaseOrder.purchaseOrderId, active.purchaseOrder.version));
   const allocate = () => perform(() => allocateShipment({
     shipmentId: form.shipmentId,
     purchaseOrderLineId: form.purchaseOrderLineId,
@@ -154,7 +157,13 @@ export default function TradeCyclePage({ navigate }) {
         <CycleSummary cycle={active} ordered={ordered} shipped={shipped} received={received}/>
 
         {editable && active.purchaseOrder.status === "DRAFT" && <section className="panel cycle-action"><div><h2>1. 발주 확정</h2><p className="muted">승인은 내부 결정입니다. 외부 사이트 주문·결제는 별도입니다.</p></div><div className="cycle-buttons">
-          <button disabled={saving} className="button primary" onClick={() => perform(() => approvePurchaseOrder(active.purchaseOrder.purchaseOrderId, active.purchaseOrder.version))}>발주 승인</button>
+          {active.purchaseOrder.catalogRecheckStatus && active.purchaseOrder.catalogRecheckStatus !== "NOT_REQUIRED" && <>
+            <button disabled={saving} className="button secondary" onClick={recheckCatalog}>가격·재고 재확인</button>
+            <span className="muted">{active.purchaseOrder.catalogRecheckMessage || "승인 전 도매 상품을 재확인해 주세요."}</span>
+          </>}
+          <button disabled={saving || (active.purchaseOrder.catalogRecheckStatus
+            && !["NOT_REQUIRED", "PASSED"].includes(active.purchaseOrder.catalogRecheckStatus))}
+            className="button primary" onClick={() => perform(() => approvePurchaseOrder(active.purchaseOrder.purchaseOrderId, active.purchaseOrder.version))}>발주 승인</button>
           {user?.role !== "OPERATOR" && <button disabled={saving} className="button danger" onClick={() => perform(() => cancelPurchaseOrder(active.purchaseOrder.purchaseOrderId, active.purchaseOrder.version))}>발주 취소</button>}
         </div></section>}
 
@@ -162,7 +171,15 @@ export default function TradeCyclePage({ navigate }) {
           <h2>2. 사업자 사이트 주문 인계</h2>
           <p className="muted">내부 발주 승인 {active.purchaseOrder.status === "DRAFT" ? "대기" : "완료"} · 외부 주문 {active.purchaseOrder.externalOrderStatus === "PLACED" ? "번호 기록됨" : "미기록"}. 실제 주문·결제는 원 사이트에서 사용자가 진행합니다.</p>
           {active.purchaseOrder.externalOrderStatus === "PLACED" && <p>외부 주문번호 {active.purchaseOrder.externalOrderReference} · 확정금액 {active.purchaseOrder.currency} {quantity(active.purchaseOrder.externalOrderTotal)}</p>}
-          {editable && active.purchaseOrder.status === "APPROVED" && active.purchaseOrder.externalOrderStatus !== "PLACED" &&
+          {editable && active.purchaseOrder.status === "APPROVED"
+            && active.purchaseOrder.catalogRecheckStatus && active.purchaseOrder.catalogRecheckStatus !== "NOT_REQUIRED"
+            && active.purchaseOrder.externalOrderStatus !== "PLACED" && <div className="form-actions">
+              <button type="button" className="button secondary" disabled={saving} onClick={recheckCatalog}>주문 직전 가격·재고 재확인</button>
+              <span className="muted">{active.purchaseOrder.catalogRecheckMessage || "아직 재확인하지 않았습니다."}</span>
+            </div>}
+          {editable && active.purchaseOrder.status === "APPROVED" && active.purchaseOrder.externalOrderStatus !== "PLACED"
+            && (!active.purchaseOrder.catalogRecheckStatus
+              || ["NOT_REQUIRED", "PASSED"].includes(active.purchaseOrder.catalogRecheckStatus)) &&
             <form className="form-grid three" aria-label="외부 주문 기록" onSubmit={submit(recordPortalOrder)}>
               <label>원 사이트 주문번호<input required maxLength="200" value={form.externalOrderReference} onChange={e => update("externalOrderReference", e.target.value)}/></label>
               <label>확정 주문금액 ({active.purchaseOrder.currency})<input required type="number" min="0" step="0.0001" value={form.externalTotalAmount} onChange={e => update("externalTotalAmount", e.target.value)}/></label>

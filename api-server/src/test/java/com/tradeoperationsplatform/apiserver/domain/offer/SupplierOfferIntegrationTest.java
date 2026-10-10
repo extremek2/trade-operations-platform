@@ -89,6 +89,7 @@ class SupplierOfferIntegrationTest extends PostgresTestSupport {
         assertThat(imported.at("/lines/0/priceTiers/1/minimumQuantity").decimalValue()).isEqualByComparingTo("20");
         assertThat(imported.at("/lines/0/priceTiers/1/unitPrice").decimalValue()).isEqualByComparingTo("4100");
         assertThat(imported.at("/lines/0/availableQuantity").decimalValue()).isEqualByComparingTo("85");
+        assertThat(imported.at("/lines/0/sourceItemId").asText()).isEqualTo("1002");
         assertThat(imported.at("/lines/0/notes").asText()).contains("구간가").contains("샘플 데이터");
         assertThat(imported.get("supplierName").asText()).contains("sample_household");
         assertThat(artifacts.count()).isEqualTo(artifactCount + 1);
@@ -106,9 +107,10 @@ class SupplierOfferIntegrationTest extends PostgresTestSupport {
                 .andExpect(status().isNotFound());
 
         JsonNode reviewed = body(call(put("/api/v1/supplier-offer-drafts/" + imported.get("draftId").asText() + "/lines/1"), owner,
-                Map.of("version", 0, "reviewedName", "테스트 생활용품 박스", "supplierSku", "1002",
+                Map.of("version", 0, "reviewedName", "테스트 생활용품 박스", "supplierSku", "CUSTOM-1002",
                         "quantityUnit", "EA", "minimumQuantity", 5, "unitPrice", 4500))
                 .andExpect(status().isOk()));
+        assertThat(reviewed.at("/lines/0/sourceItemId").asText()).isEqualTo("1002");
         JsonNode confirmed = body(call(post("/api/v1/supplier-offer-drafts/" + imported.get("draftId").asText() + "/confirm"), owner,
                 Map.of("version", reviewed.get("version").asLong())).andExpect(status().isOk()));
         call(post("/api/v1/supplier-offer-drafts/" + imported.get("draftId").asText() + "/selections"), owner,
@@ -122,6 +124,36 @@ class SupplierOfferIntegrationTest extends PostgresTestSupport {
         JsonNode quote = body(call(get("/api/v1/quotes/" + selection.get("quoteId").asText()), owner, null)
                 .andExpect(status().isOk()));
         assertThat(quote.at("/lines/0/unitPrice").decimalValue()).isEqualByComparingTo("4100");
+
+        String quoteId = selection.get("quoteId").asText();
+        String productId = selection.at("/lines/0/productId").asText();
+        body(call(post("/api/v1/quotes/" + quoteId + "/status"), owner,
+                Map.of("version", 0, "status", "RECEIVED")).andExpect(status().isOk()));
+        JsonNode scenario = body(call(post("/api/v1/cost-scenarios"), owner,
+                completeScenarioRequest(quoteId, productId))
+                .andExpect(status().isCreated()));
+        body(call(post("/api/v1/quotes/" + quoteId + "/status"), owner,
+                Map.of("version", 1, "status", "SELECTED")).andExpect(status().isOk()));
+
+        JsonNode cycle = body(call(post("/api/v1/trade-cycles/purchase-orders"), owner,
+                Map.of("costScenarioIds", List.of(scenario.get("scenarioId").asText()),
+                        "orderNumber", "PO-CATALOG-" + UUID.randomUUID(),
+                        "procurementRoute", "DOMESTIC_STOCK")).andExpect(status().isCreated()));
+        String orderId = cycle.at("/purchaseOrder/purchaseOrderId").asText();
+        assertThat(cycle.at("/purchaseOrder/catalogRecheckStatus").asText()).isEqualTo("REQUIRED");
+        assertThat(cycle.at("/purchaseOrder/lines/0/sourcePlatform").asText()).isEqualTo("DOMEGGOOK");
+        assertThat(cycle.at("/purchaseOrder/lines/0/sourceItemId").asText()).isEqualTo("1002");
+        call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/approve"), owner,
+                Map.of("version", 0)).andExpect(status().isBadRequest());
+
+        JsonNode rechecked = body(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/catalog-recheck"), owner,
+                Map.of("version", 0)).andExpect(status().isOk()));
+        assertThat(rechecked.at("/purchaseOrder/catalogRecheckStatus").asText()).isEqualTo("PASSED");
+        assertThat(rechecked.at("/purchaseOrder/catalogRecheckedAt").isTextual()).isTrue();
+        assertThat(rechecked.at("/purchaseOrder/catalogRecheckMessage").asText()).contains("일치");
+        JsonNode approved = body(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/approve"), owner,
+                Map.of("version", rechecked.at("/purchaseOrder/version").asLong())).andExpect(status().isOk()));
+        assertThat(approved.at("/purchaseOrder/status").asText()).isEqualTo("APPROVED");
     }
 
     @Test
@@ -332,6 +364,20 @@ class SupplierOfferIntegrationTest extends PostgresTestSupport {
                 UUID.randomUUID() + "@example.test", passwords.encode("test-password-1234"), role.name(), null));
         members.save(new OrganizationMember(organization, user, role));
         return auth.login(new LoginRequest(user.getEmail(), "test-password-1234", null)).response().accessToken();
+    }
+
+    private Map<String, Object> completeScenarioRequest(String quoteId, String productId) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("quoteId", quoteId); request.put("productId", productId);
+        request.put("scenarioName", "도매 재확인 기준안"); request.put("orderQuantity", 20);
+        request.put("excludedQuantity", 0); request.put("exchangeRate", 1);
+        request.put("exchangeRateSource", "USER_ASSUMPTION"); request.put("taxableFreightKrw", 0);
+        request.put("customsClearanceCostKrw", 0); request.put("inspectionCostKrw", 0);
+        request.put("warehouseCostKrw", 0); request.put("domesticDeliveryCostKrw", 0);
+        request.put("otherCostKrw", 0); request.put("logisticsCostSource", "USER_ASSUMPTION");
+        request.put("customsDutyRate", 0); request.put("vatRate", 10);
+        request.put("taxRateSource", "USER_ASSUMPTION"); request.put("vatTreatment", "RECOVERABLE_EXCLUDED");
+        return request;
     }
 
     private ResultActions call(MockHttpServletRequestBuilder request, String bearer, Object data) throws Exception {

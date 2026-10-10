@@ -89,6 +89,7 @@ public class WholesaleCatalogService {
             line.applyExtraction(item.title(), item.itemId(), "EA", minimumQuantity,
                     initialUnitPrice, null, notes, item.priceTiers().isEmpty() ? List.of()
                             : List.of("희망 수량에 따라 구간 단가가 자동 적용됩니다."));
+            line.sourceItemId(item.itemId());
             line.availableQuantity(item.availableQuantity());
             line.priceTiers(item.priceTiers());
             draft.addLine(line);

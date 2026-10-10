@@ -54,6 +54,13 @@ public class TradeCycleController {
         return ApiResponse.ok(service.recordExternalOrder(orderId, request));
     }
 
+    @PostMapping("/purchase-orders/{orderId}/catalog-recheck")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','OPERATOR')")
+    public ApiResponse<TradeCycleResponse> catalogRecheck(@PathVariable UUID orderId,
+            @Valid @RequestBody TradeCycleRequests.OrderAction request) {
+        return ApiResponse.ok(service.recheckCatalog(orderId, request));
+    }
+
     @PostMapping("/shipment-allocations")
     @PreAuthorize("hasAnyRole('OWNER','ADMIN','OPERATOR')")
     @ResponseStatus(HttpStatus.CREATED)

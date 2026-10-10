@@ -3,6 +3,9 @@ package com.tradeoperationsplatform.apiserver.domain.tradecycle;
 import com.tradeoperationsplatform.apiserver.domain.auth.service.CurrentActor;
 import com.tradeoperationsplatform.apiserver.domain.costing.entity.CostScenario;
 import com.tradeoperationsplatform.apiserver.domain.costing.repository.CostScenarioRepository;
+import com.tradeoperationsplatform.apiserver.domain.offer.DomeggookCatalogGateway;
+import com.tradeoperationsplatform.apiserver.domain.offer.PurchaseSelectionLineRepository;
+import com.tradeoperationsplatform.apiserver.domain.offer.SourceArtifact;
 import com.tradeoperationsplatform.apiserver.domain.shipment.entity.ShipmentCase;
 import com.tradeoperationsplatform.apiserver.domain.shipment.repository.ShipmentCaseRepository;
 import com.tradeoperationsplatform.apiserver.domain.sourcing.entity.SupplierQuote;
@@ -34,6 +37,8 @@ public class TradeCycleService {
     private final ActualCostCloseRepository costCloses;
     private final SalesObservationRepository sales;
     private final ReorderDecisionRepository decisions;
+    private final PurchaseSelectionLineRepository selectionLines;
+    private final DomeggookCatalogGateway catalogGateway;
     private final CurrentActor currentActor;
 
     @Transactional
@@ -61,12 +66,24 @@ public class TradeCycleService {
             PurchaseOrder order = new PurchaseOrder(actor.organization(), actor.user(), selectedScenarios,
                     request.orderNumber(), request.orderedAt(), request.notes(), request.procurementRoute());
             int lineNumber = 1;
+            boolean catalogRecheckRequired = false;
             for (CostScenario scenario : selectedScenarios) {
                 SupplierQuoteLine quoteLine = scenario.getQuote().getLines().stream()
                         .filter(line -> line.getProduct().getId().equals(scenario.getProduct().getId()))
                         .findFirst().orElseThrow(() -> new BusinessException("원가 시나리오의 견적 품목을 찾을 수 없습니다."));
-                order.addLine(new PurchaseOrderLine(order, scenario, lineNumber++, quoteLine.getQuantityUnit()));
+                PurchaseOrderLine orderLine = new PurchaseOrderLine(order, scenario, lineNumber++, quoteLine.getQuantityUnit());
+                var selectionLine = selectionLines.findByQuoteLineId(quoteLine.getId()).orElse(null);
+                if (selectionLine != null) {
+                    SourceArtifact source = selectionLine.getOfferLine().getDraft().getExtractionRun().getSourceArtifact();
+                    if (source.getSourceType() == SourceArtifact.SourceType.API) {
+                        orderLine.catalogSource("DOMEGGOOK", selectionLine.getOfferLine().getSourceItemId(),
+                                source.getSourceReference(), source.getReceivedAt());
+                        catalogRecheckRequired = true;
+                    }
+                }
+                order.addLine(orderLine);
             }
+            if (catalogRecheckRequired) order.requireCatalogRecheck();
             return response(orders.saveAndFlush(order));
         } catch (IllegalArgumentException e) {
             throw new BusinessException(e.getMessage());
@@ -122,6 +139,55 @@ public class TradeCycleService {
         try {
             order.recordExternalOrder(request.externalOrderReference(), request.totalAmount(), request.orderedAt());
         } catch (IllegalArgumentException | IllegalStateException e) { throw new BusinessException(e.getMessage()); }
+        orders.saveAndFlush(order);
+        return response(order);
+    }
+
+    @Transactional
+    public TradeCycleResponse recheckCatalog(UUID orderId, TradeCycleRequests.OrderAction request) {
+        PurchaseOrder order = requireOrder(orderId);
+        checkVersion(order, request.version());
+        if (order.getProcurementRoute() != PurchaseOrder.ProcurementRoute.DOMESTIC_STOCK)
+            throw new BusinessException("국내 재고 매입 발주만 도매 상품을 재확인할 수 있습니다.");
+        if (!EnumSet.of(PurchaseOrder.Status.DRAFT, PurchaseOrder.Status.APPROVED).contains(order.getStatus()))
+            throw new BusinessException("초안 또는 승인 상태의 발주만 재확인할 수 있습니다.");
+        List<PurchaseOrderLine> catalogLines = order.getLines().stream()
+                .filter(line -> line.getSourcePlatform() != null).toList();
+        if (catalogLines.isEmpty()) throw new BusinessException("재확인할 도매 상품이 없습니다.");
+
+        List<String> changes = new ArrayList<>();
+        List<String> failures = new ArrayList<>();
+        for (PurchaseOrderLine line : catalogLines) {
+            if (!"DOMEGGOOK".equals(line.getSourcePlatform())) {
+                failures.add(line.getProductNameSnapshot() + ": 지원하지 않는 플랫폼");
+                continue;
+            }
+            DomeggookCatalogGateway.Mode mode = line.getSourceReference().startsWith("sample://")
+                    ? DomeggookCatalogGateway.Mode.SAMPLE : DomeggookCatalogGateway.Mode.LIVE;
+            try {
+                var current = catalogGateway.detail(line.getSourceItemId(), mode).item();
+                BigDecimal currentPrice = current.unitPriceFor(line.getOrderedQuantity());
+                if (currentPrice.compareTo(line.getUnitPrice()) != 0)
+                    changes.add(line.getProductNameSnapshot() + ": 단가 " + line.getUnitPrice().stripTrailingZeros().toPlainString()
+                            + " → " + currentPrice.stripTrailingZeros().toPlainString());
+                if (current.availableQuantity() == null)
+                    failures.add(line.getProductNameSnapshot() + ": 재고 미확인");
+                else if (line.getOrderedQuantity().compareTo(BigDecimal.valueOf(current.availableQuantity())) > 0)
+                    changes.add(line.getProductNameSnapshot() + ": 재고 " + current.availableQuantity()
+                            + " < 발주 " + line.getOrderedQuantity().stripTrailingZeros().toPlainString());
+            } catch (BusinessException | IllegalArgumentException e) {
+                failures.add(line.getProductNameSnapshot() + ": " + e.getMessage());
+            }
+        }
+        PurchaseOrder.CatalogRecheckStatus result = !failures.isEmpty()
+                ? PurchaseOrder.CatalogRecheckStatus.FAILED
+                : changes.isEmpty() ? PurchaseOrder.CatalogRecheckStatus.PASSED
+                : PurchaseOrder.CatalogRecheckStatus.CHANGED;
+        String message = result == PurchaseOrder.CatalogRecheckStatus.PASSED
+                ? "발주 수량의 가격·재고가 승인 기준과 일치합니다."
+                : String.join(" / ", result == PurchaseOrder.CatalogRecheckStatus.FAILED ? failures : changes);
+        try { order.recordCatalogRecheck(result, abbreviate(message, 2000)); }
+        catch (IllegalArgumentException | IllegalStateException e) { throw new BusinessException(e.getMessage()); }
         orders.saveAndFlush(order);
         return response(order);
     }
@@ -373,9 +439,12 @@ public class TradeCycleService {
                 new TradeCycleResponse.LineView(line.getPublicId(), line.getCostScenario().getPublicId(),
                         line.getProduct().getPublicId(), line.getProductNameSnapshot(), line.getInternalSkuSnapshot(),
                         line.getOrderedQuantity(), shippedByLine.get(line.getId()),
-                        receivedByLine.get(line.getId()), line.getQuantityUnit(), line.getUnitPrice())).toList(),
+                        receivedByLine.get(line.getId()), line.getQuantityUnit(), line.getUnitPrice(),
+                        line.getSourcePlatform(), line.getSourceItemId(), line.getSourceReference(),
+                        line.getSourceFetchedAt())).toList(),
                 order.getProcurementRoute(), order.getExternalOrderStatus(), order.getExternalOrderReference(),
-                order.getExternalOrderTotal(), order.getExternalOrderedAt());
+                order.getExternalOrderTotal(), order.getExternalOrderedAt(), order.getCatalogRecheckStatus(),
+                order.getCatalogRecheckedAt(), order.getCatalogRecheckMessage());
         List<TradeCycleResponse.AllocationView> allocationViews = orderAllocations.stream().map(item ->
                 new TradeCycleResponse.AllocationView(item.getPublicId(), item.getShipment().getPublicId(),
                         item.getShipment().getCaseNumber(), item.getPurchaseOrderLine().getPublicId(), item.getAllocatedQuantity(),
@@ -402,6 +471,10 @@ public class TradeCycleService {
                 new TradeCycleResponse.DecisionView(decision.getPublicId(), decision.getProduct().getPublicId(),
                         decision.getProduct().getName(), decision.getDecision(), decision.getReason(), decision.getDecidedAt())).toList();
         return new TradeCycleResponse(orderView, allocationViews, lotViews, costViews, closeView, salesViews, decisionViews);
+    }
+
+    private static String abbreviate(String value, int maximum) {
+        return value == null || value.length() <= maximum ? value : value.substring(0, maximum);
     }
 
     private record ResolvedReceipt(ShipmentAllocation allocation, TradeCycleRequests.ReceiptEntry entry) {}
