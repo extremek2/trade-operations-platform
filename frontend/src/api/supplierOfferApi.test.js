@@ -1,7 +1,15 @@
 import { apiRequest } from "./client";
-import { createDocumentDraft, importSupplierDocument, importSupplierOfferFile } from "./supplierOfferApi";
+import { createDocumentDraft, getWholesaleCatalogStatus, importSupplierDocument, importSupplierOfferFile } from "./supplierOfferApi";
 
 jest.mock("./client", () => ({ apiRequest: jest.fn() }));
+
+beforeEach(() => jest.clearAllMocks());
+
+test("도매 사이트 라이브 설정 상태를 서버에서 조회한다", () => {
+  getWholesaleCatalogStatus();
+
+  expect(apiRequest).toHaveBeenCalledWith("/wholesale-catalog/status");
+});
 
 test("공급 제안 파일을 multipart 필드로 조립한다", () => {
   const file = new File(["상품명,단가\n테스트,100"], "offer.csv", { type: "text/csv" });

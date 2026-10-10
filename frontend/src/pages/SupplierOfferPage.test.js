@@ -4,7 +4,7 @@ import { getProducts } from "../api/productApi";
 import { createDocumentDraft, createPurchaseSelection, createSupplierOfferDraft, getPurchaseSelections,
   getSupplierDocuments, getSupplierOfferDrafts, importSupplierDocument, importSupplierOfferFile } from "../api/supplierOfferApi";
 import { getSupplierDocumentContent, reviewSupplierOfferDraft } from "../api/supplierOfferApi";
-import { searchWholesaleCatalog, getWholesaleCatalogItem, importWholesaleCatalogItem } from "../api/supplierOfferApi";
+import { searchWholesaleCatalog, getWholesaleCatalogItem, getWholesaleCatalogStatus, importWholesaleCatalogItem } from "../api/supplierOfferApi";
 import SupplierOfferPage from "./SupplierOfferPage";
 
 jest.mock("../api/partnerApi", () => ({ getBusinessPartners: jest.fn() }));
@@ -15,7 +15,7 @@ jest.mock("../api/supplierOfferApi", () => ({
   getPurchaseSelections: jest.fn(), getSupplierDocuments: jest.fn(), getSupplierDocumentContent: jest.fn(),
   getSupplierOfferDrafts: jest.fn(), importSupplierDocument: jest.fn(), importSupplierOfferFile: jest.fn(), reviewSupplierOfferLine: jest.fn(),
   reviewSupplierOfferDraft: jest.fn(),
-  searchWholesaleCatalog: jest.fn(), getWholesaleCatalogItem: jest.fn(), importWholesaleCatalogItem: jest.fn(),
+  searchWholesaleCatalog: jest.fn(), getWholesaleCatalogItem: jest.fn(), getWholesaleCatalogStatus: jest.fn(), importWholesaleCatalogItem: jest.fn(),
 }));
 jest.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { role: "OWNER" } }) }));
 
@@ -43,11 +43,29 @@ beforeEach(() => {
   createDocumentDraft.mockResolvedValue({});
   getSupplierDocumentContent.mockResolvedValue(new Blob(["%PDF-sample"], { type: "application/pdf" }));
   reviewSupplierOfferDraft.mockResolvedValue({});
+  getWholesaleCatalogStatus.mockResolvedValue({ liveConfigured: false, platform: "DOMEGGOOK" });
   searchWholesaleCatalog.mockResolvedValue([]);
   getWholesaleCatalogItem.mockResolvedValue({});
   importWholesaleCatalogItem.mockResolvedValue({});
   URL.createObjectURL = jest.fn(() => "blob:document-preview");
   URL.revokeObjectURL = jest.fn();
+});
+
+test("서버 API 키가 없으면 실제 도매 조회를 비활성화한다", async () => {
+  render(<SupplierOfferPage navigate={jest.fn()}/>);
+
+  const searchForm = await screen.findByRole("form", { name: "도매 상품 검색" });
+  expect(within(searchForm).getByRole("option", { name: "도매꾹 실제 API · 서버 키 필요" })).toBeDisabled();
+  expect(await screen.findByText("서버에 도매꾹 API 키가 없어 실제 API 조회는 비활성화되어 있습니다.")).toBeInTheDocument();
+});
+
+test("서버 API 키가 설정되면 실제 도매 조회를 선택할 수 있다", async () => {
+  getWholesaleCatalogStatus.mockResolvedValue({ liveConfigured: true, platform: "DOMEGGOOK" });
+  render(<SupplierOfferPage navigate={jest.fn()}/>);
+
+  const searchForm = await screen.findByRole("form", { name: "도매 상품 검색" });
+  await waitFor(() => expect(within(searchForm)
+    .getByRole("option", { name: "도매꾹 실제 API · 서버 키 필요" })).toBeEnabled());
 });
 
 test("도매 사이트 샘플 상품을 상세 확인 후 검토 초안으로 가져온다", async () => {

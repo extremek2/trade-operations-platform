@@ -6,7 +6,7 @@ import {
   excludeSupplierOfferLine, getPurchaseSelections, getSupplierDocumentContent, getSupplierDocuments,
   getSupplierOfferDrafts, importSupplierDocument, importSupplierOfferFile,
   reviewSupplierOfferDraft, reviewSupplierOfferLine, searchWholesaleCatalog,
-  getWholesaleCatalogItem, importWholesaleCatalogItem,
+  getWholesaleCatalogItem, getWholesaleCatalogStatus, importWholesaleCatalogItem,
 } from "../api/supplierOfferApi";
 import { EmptyState, ErrorMessage, LoadingState } from "../components/Feedback";
 import { useAuth } from "../context/AuthContext";
@@ -225,6 +225,7 @@ export default function SupplierOfferPage({ navigate }) {
   const [catalogForm, setCatalogForm] = useState(initialCatalogForm);
   const [catalogRows, setCatalogRows] = useState([]);
   const [catalogDetail, setCatalogDetail] = useState(null);
+  const [catalogStatus, setCatalogStatus] = useState({ liveConfigured: false, checked: false });
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -233,11 +234,13 @@ export default function SupplierOfferPage({ navigate }) {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const [partnerRows, productRows, draftRows, selectionRows, documentRows] = await Promise.all([
+      const [partnerRows, productRows, draftRows, selectionRows, documentRows, wholesaleStatus] = await Promise.all([
         getBusinessPartners(), getProducts(), getSupplierOfferDrafts(), getPurchaseSelections(), getSupplierDocuments(),
+        getWholesaleCatalogStatus(),
       ]);
       setSuppliers(partnerRows.filter(item => item.roles.includes("SUPPLIER")));
       setProducts(productRows); setDrafts(draftRows); setSelections(selectionRows); setDocuments(documentRows);
+      setCatalogStatus({ liveConfigured: wholesaleStatus.liveConfigured, checked: true });
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }, []);
@@ -337,13 +340,15 @@ export default function SupplierOfferPage({ navigate }) {
           <label>조회 방식<select value={catalogForm.mode} onChange={event => {
             setCatalogForm(current => ({ ...current, mode: event.target.value }));
             setCatalogRows([]); setCatalogDetail(null);
-          }}><option value="SAMPLE">샘플 데이터 · API 키 불필요</option><option value="LIVE">도매꾹 실제 API · 서버 키 필요</option></select></label>
+          }}><option value="SAMPLE">샘플 데이터 · API 키 불필요</option>
+            <option value="LIVE" disabled={!catalogStatus.liveConfigured}>도매꾹 실제 API · 서버 키 필요</option></select></label>
           <label>상품 검색어<input required maxLength="80" value={catalogForm.keyword}
             onChange={event => setCatalogForm(current => ({ ...current, keyword: event.target.value }))}/></label>
         </div>
         <button className="button secondary" disabled={catalogLoading}>상품 조회</button>
       </form>
       {catalogForm.mode === "SAMPLE" && <p className="muted">샘플 가격과 재고는 테스트용이며 실제 구매할 수 없습니다.</p>}
+      {catalogStatus.checked && !catalogStatus.liveConfigured && <p className="muted">서버에 도매꾹 API 키가 없어 실제 API 조회는 비활성화되어 있습니다.</p>}
       {catalogLoading && <LoadingState/>}
       {catalogRows.length > 0 && <div className="quote-list">{catalogRows.map(item => <article className="quote-entry" key={item.itemId}>
         <h3>{item.title}</h3><p>도매꾹 #{item.itemId} · 판매자 {item.sellerId || "미확인"}</p>

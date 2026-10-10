@@ -84,6 +84,7 @@ services:
       OBJECT_STORAGE_CREATE_BUCKET: ${OBJECT_STORAGE_CREATE_BUCKET:-true}
       OCR_ENABLED: ${OCR_ENABLED:-false}
       OCR_BASE_URL: ${OCR_BASE_URL:-http://ocr-worker:8090}
+      DOMEGGOOK_API_KEY: ${DOMEGGOOK_API_KEY:-}
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health/readiness"]
       interval: 5s

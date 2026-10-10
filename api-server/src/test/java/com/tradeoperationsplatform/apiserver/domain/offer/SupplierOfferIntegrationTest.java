@@ -58,6 +58,11 @@ class SupplierOfferIntegrationTest extends PostgresTestSupport {
 
     @Test
     void sampleWholesaleCatalogCreatesReviewableOfferWithoutExternalPurchase() throws Exception {
+        JsonNode catalogStatus = body(call(get("/api/v1/wholesale-catalog/status"), owner, null)
+                .andExpect(status().isOk()));
+        assertThat(catalogStatus.get("liveConfigured").asBoolean()).isFalse();
+        assertThat(catalogStatus.get("platform").asText()).isEqualTo("DOMEGGOOK");
+
         JsonNode search = body(call(get("/api/v1/wholesale-catalog/items")
                 .param("keyword", "테스트").param("mode", "SAMPLE"), owner, null)
                 .andExpect(status().isOk()));

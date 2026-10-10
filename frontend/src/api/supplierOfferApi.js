@@ -1,5 +1,6 @@
 import { apiBlob, apiRequest } from "./client";
 
+export const getWholesaleCatalogStatus = () => apiRequest("/wholesale-catalog/status");
 export const searchWholesaleCatalog = (keyword, mode) =>
   apiRequest(`/wholesale-catalog/items?keyword=${encodeURIComponent(keyword)}&mode=${mode}`);
 export const getWholesaleCatalogItem = (itemId, mode) =>
