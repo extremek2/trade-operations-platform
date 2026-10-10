@@ -13,8 +13,8 @@ class DeploymentRehearsalTest {
         try(var database=new PostgreSQLContainer<>("postgres:15-alpine")) {
             database.withEnv("APP_DB_USER","runtime_fixture").withEnv("APP_DB_PASSWORD","test-only-runtime-password");
             database.start();
-            var migration=Flyway.configure().dataSource(database.getJdbcUrl(),database.getUsername(),database.getPassword());
-            migration.load().migrate();
+            Flyway migration=Flyway.configure().dataSource(database.getJdbcUrl(),database.getUsername(),database.getPassword()).load();
+            migration.migrate();
             exec(database,"psql","-U",database.getUsername(),"-d",database.getDatabaseName(),"-v","ON_ERROR_STOP=1","-c","""
                 INSERT INTO organization(name,organization_type) VALUES ('restore fixture','SHIPPER');
                 INSERT INTO app_user(email,name) VALUES ('restore@example.test','restore fixture');
@@ -35,7 +35,8 @@ class DeploymentRehearsalTest {
                 assertThatThrownBy(() -> sql.execute("DELETE FROM identity_audit_event")).isInstanceOf(SQLException.class);
                 assertThatThrownBy(() -> sql.execute("UPDATE flyway_schema_history SET success=false")).isInstanceOf(SQLException.class);
             }
-                assertThat(query(database,database.getJdbcUrl(),"SELECT max(installed_rank) FROM flyway_schema_history")).isEqualTo("16");
+            assertThat(query(database,database.getJdbcUrl(),"SELECT max(installed_rank) FROM flyway_schema_history"))
+                    .isEqualTo(String.valueOf(migration.info().applied().length));
             assertThat(query(database,candidate,"SELECT count(*) FROM organization_member WHERE member_role='OWNER'")).isEqualTo("1");
             exec(database,"psql","-U",database.getUsername(),"-d","candidate","-v","ON_ERROR_STOP=1","-c","""
                 INSERT INTO business_partner(owner_organization_id,name) VALUES(1,'fixture partner');

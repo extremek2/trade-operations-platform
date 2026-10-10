@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -27,6 +28,7 @@ public class SupplierOfferDraftLine {
     @Column(name = "supplier_sku") private String supplierSku;
     @Column(name = "quantity_unit") private String quantityUnit;
     @Column(name = "minimum_quantity", precision = 19, scale = 6) private BigDecimal minimumQuantity;
+    @Column(name = "available_quantity", precision = 19, scale = 6) private BigDecimal availableQuantity;
     @Column(name = "unit_price", precision = 19, scale = 4) private BigDecimal unitPrice;
     @Column(name = "country_of_origin", length = 2) private String countryOfOrigin;
     @Column(name = "notes") private String notes;
@@ -35,6 +37,9 @@ public class SupplierOfferDraftLine {
     @Enumerated(EnumType.STRING) @Column(nullable = false) private Status status;
     @Column(name = "reviewed_at") private LocalDateTime reviewedAt;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "reviewed_by") private AppUser reviewedBy;
+    @OneToMany(mappedBy = "offerLine", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("minimumQuantity ASC")
+    private List<SupplierOfferPriceTier> priceTiers = new java.util.ArrayList<>();
 
     public SupplierOfferDraftLine(SupplierOfferDraft draft, int lineNumber, String originalName, String sourceLocation) {
         if (lineNumber < 1) throw new IllegalArgumentException("행 번호는 1 이상이어야 합니다.");
@@ -91,6 +96,29 @@ public class SupplierOfferDraftLine {
     public void reviewedBy(AppUser actor) { this.reviewedBy = actor; }
 
     public void extractionConfidence(BigDecimal confidence) { this.extractionConfidence = confidence; }
+
+    public void availableQuantity(Integer quantity) {
+        ensureEditable();
+        if (quantity != null && quantity < 0) throw new IllegalArgumentException("재고는 음수일 수 없습니다.");
+        this.availableQuantity = quantity == null ? null : BigDecimal.valueOf(quantity);
+    }
+
+    public void priceTiers(List<WholesalePriceTier> tiers) {
+        ensureEditable();
+        priceTiers.clear();
+        if (tiers == null) return;
+        tiers.forEach(tier -> priceTiers.add(new SupplierOfferPriceTier(
+                this, tier.minimumQuantity(), tier.unitPrice())));
+    }
+
+    public BigDecimal unitPriceFor(BigDecimal desiredQuantity) {
+        if (priceTiers.isEmpty()) return unitPrice;
+        return priceTiers.stream()
+                .filter(tier -> desiredQuantity.compareTo(tier.getMinimumQuantity()) >= 0)
+                .max(Comparator.comparing(SupplierOfferPriceTier::getMinimumQuantity))
+                .orElseThrow(() -> new IllegalArgumentException("희망 수량에 적용할 구간가가 없습니다."))
+                .getUnitPrice();
+    }
 
     private void ensureEditable() {
         if (draft.getStatus() != SupplierOfferDraft.Status.REVIEW_REQUIRED)

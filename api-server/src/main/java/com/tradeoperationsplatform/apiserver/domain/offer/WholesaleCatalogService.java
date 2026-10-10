@@ -79,13 +79,18 @@ public class WholesaleCatalogService {
                     "domeggook-xml-v1"));
             SupplierOfferDraft draft = new SupplierOfferDraft(actor.organization(), supplier, run, actor.user(), "KRW");
             SupplierOfferDraftLine line = new SupplierOfferDraftLine(draft, 1, item.title(), sourceReference);
+            BigDecimal minimumQuantity = BigDecimal.valueOf(item.minimumQuantity());
+            BigDecimal initialUnitPrice = item.unitPriceFor(minimumQuantity);
             String notes = "도매꾹 #" + item.itemId() + " · 판매자 " + item.sellerId()
                     + (item.businessOnly() ? " · 사업자 전용" : "")
-                    + (item.priceTiers() == null ? "" : " · 구간가 " + item.priceTiers())
+                    + (item.priceTiers().isEmpty() ? "" : " · 구간가 " + formatTiers(item.priceTiers()))
                     + (item.shippingFee() == null ? "" : " · 배송비 " + item.shippingFee())
                     + (mode == DomeggookCatalogGateway.Mode.SAMPLE ? " · 샘플 데이터" : "");
-            line.applyExtraction(item.title(), item.itemId(), "EA", BigDecimal.valueOf(item.minimumQuantity()),
-                    item.unitPrice(), null, notes, item.priceTiers() == null ? List.of() : List.of("구간별 단가와 희망 수량을 확인해 주세요."));
+            line.applyExtraction(item.title(), item.itemId(), "EA", minimumQuantity,
+                    initialUnitPrice, null, notes, item.priceTiers().isEmpty() ? List.of()
+                            : List.of("희망 수량에 따라 구간 단가가 자동 적용됩니다."));
+            line.availableQuantity(item.availableQuantity());
+            line.priceTiers(item.priceTiers());
             draft.addLine(line);
             return SupplierOfferResponse.from(drafts.saveAndFlush(draft));
         } catch (IllegalArgumentException e) {
@@ -93,6 +98,12 @@ public class WholesaleCatalogService {
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException("동일한 API 원본 또는 판매자 정보가 이미 등록되었습니다.");
         }
+    }
+
+    private static String formatTiers(List<WholesalePriceTier> tiers) {
+        return tiers.stream().map(tier -> tier.minimumQuantity().stripTrailingZeros().toPlainString()
+                + "+" + tier.unitPrice().stripTrailingZeros().toPlainString())
+                .reduce((left, right) -> left + "|" + right).orElse("");
     }
 
     private static String sha256(String value) {

@@ -23,7 +23,9 @@ const draft = {
   draftId: "draft-1", supplierName: "오사카 공급처", supplierId: "supplier-1",
   status: "CONFIRMED", version: 4, currency: "JPY", sourceType: "MANUAL", originalText: "A, B, C 원본",
   lines: [
-    { lineNumber: 1, originalName: "원본 A", reviewedName: "확인 A", status: "CONFIRMED", quantityUnit: "EA", minimumQuantity: 10, unitPrice: 280 },
+    { lineNumber: 1, originalName: "원본 A", reviewedName: "확인 A", status: "CONFIRMED", quantityUnit: "EA", minimumQuantity: 10,
+      availableQuantity: 30, unitPrice: 280,
+      priceTiers: [{ minimumQuantity: 10, unitPrice: 280 }, { minimumQuantity: 20, unitPrice: 250 }] },
     { lineNumber: 2, originalName: "원본 B", reviewedName: "확인 B", status: "CONFIRMED", quantityUnit: "EA", minimumQuantity: 5, unitPrice: 190 },
     { lineNumber: 3, originalName: "원본 C", reviewedName: null, status: "EXCLUDED", quantityUnit: null, minimumQuantity: null, unitPrice: null },
   ],
@@ -72,7 +74,9 @@ test("도매 사이트 샘플 상품을 상세 확인 후 검토 초안으로 �
   searchWholesaleCatalog.mockResolvedValue([{ itemId: "1002", title: "테스트 생활용품 박스", sellerId: "sample_household",
     unitPrice: 4500, minimumQuantity: 5, businessOnly: true, overseasShipping: false }]);
   getWholesaleCatalogItem.mockResolvedValue({ itemId: "1002", title: "테스트 생활용품 박스",
-    sellerId: "sample_household", minimumQuantity: 5, priceTiers: "1+4500|20+4100", unitPrice: null,
+    sellerId: "sample_household", minimumQuantity: 5, priceTiers: [
+      { minimumQuantity: 1, unitPrice: 4500 }, { minimumQuantity: 20, unitPrice: 4100 },
+    ], unitPrice: null,
     availableQuantity: 85, shippingFee: "수량별 배송비", businessOnly: true, overseasShipping: false,
     fetchedAt: "2026-09-22T17:00:00", productUrl: null });
   render(<SupplierOfferPage navigate={jest.fn()}/>);
@@ -80,7 +84,7 @@ test("도매 사이트 샘플 상품을 상세 확인 후 검토 초안으로 �
   fireEvent.click(within(searchForm).getByRole("button", { name: "상품 조회" }));
   await waitFor(() => expect(searchWholesaleCatalog).toHaveBeenCalledWith("테스트", "SAMPLE"));
   fireEvent.click(await screen.findByRole("button", { name: "상세 조건 확인" }));
-  expect(await screen.findByText(/수량별 단가 1\+4500\|20\+4100/)).toBeInTheDocument();
+  expect(await screen.findByText(/수량별 단가 1개 이상 4,500원 \/ 20개 이상 4,100원/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "검토 초안으로 가져오기" }));
   await waitFor(() => expect(importWholesaleCatalogItem).toHaveBeenCalledWith("1002", "SAMPLE"));
 });
@@ -178,7 +182,11 @@ test("확인된 행 중 선택한 행과 희망 수량만 구매 선택 API에 �
   const form = await screen.findByRole("form", { name: "오사카 공급처 구매 품목 선택" });
   const first = within(form).getByText("확인 행 1 · 확인 A").closest("fieldset");
   fireEvent.click(within(first).getByRole("checkbox"));
+  expect(within(first).getByLabelText("희망 수량")).toHaveAttribute("max", "30");
+  expect(within(first).getByText(/조회 당시 재고 30 EA/)).toBeInTheDocument();
+  expect(within(first).getByText(/희망 수량 적용 단가 KRW 280/)).toBeInTheDocument();
   fireEvent.change(within(first).getByLabelText("희망 수량"), { target: { value: "24" } });
+  expect(within(first).getByText(/희망 수량 적용 단가 KRW 250/)).toBeInTheDocument();
   fireEvent.click(within(form).getByRole("button", { name: "선택 행을 견적으로 넘기기" }));
 
   await waitFor(() => expect(createPurchaseSelection).toHaveBeenCalledWith("draft-1", {

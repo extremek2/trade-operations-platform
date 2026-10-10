@@ -71,7 +71,9 @@ class SupplierOfferIntegrationTest extends PostgresTestSupport {
         assertThat(search.get(0).get("productUrl").isNull()).isTrue();
         JsonNode detail = body(call(get("/api/v1/wholesale-catalog/items/1002")
                 .param("mode", "SAMPLE"), owner, null).andExpect(status().isOk()));
-        assertThat(detail.get("priceTiers").asText()).contains("20+4100");
+        assertThat(detail.get("priceTiers")).hasSize(3);
+        assertThat(detail.at("/priceTiers/1/minimumQuantity").decimalValue()).isEqualByComparingTo("20");
+        assertThat(detail.at("/priceTiers/1/unitPrice").decimalValue()).isEqualByComparingTo("4100");
         assertThat(detail.get("unitPrice").isNull()).isTrue();
 
         long artifactCount = artifacts.count();
@@ -82,7 +84,11 @@ class SupplierOfferIntegrationTest extends PostgresTestSupport {
         assertThat(imported.get("extractionMethod").asText()).isEqualTo("API");
         assertThat(imported.get("status").asText()).isEqualTo("REVIEW_REQUIRED");
         assertThat(imported.get("currency").asText()).isEqualTo("KRW");
-        assertThat(imported.at("/lines/0/unitPrice").isNull()).isTrue();
+        assertThat(imported.at("/lines/0/unitPrice").decimalValue()).isEqualByComparingTo("4500");
+        assertThat(imported.at("/lines/0/priceTiers")).hasSize(3);
+        assertThat(imported.at("/lines/0/priceTiers/1/minimumQuantity").decimalValue()).isEqualByComparingTo("20");
+        assertThat(imported.at("/lines/0/priceTiers/1/unitPrice").decimalValue()).isEqualByComparingTo("4100");
+        assertThat(imported.at("/lines/0/availableQuantity").decimalValue()).isEqualByComparingTo("85");
         assertThat(imported.at("/lines/0/notes").asText()).contains("구간가").contains("샘플 데이터");
         assertThat(imported.get("supplierName").asText()).contains("sample_household");
         assertThat(artifacts.count()).isEqualTo(artifactCount + 1);
@@ -98,6 +104,24 @@ class SupplierOfferIntegrationTest extends PostgresTestSupport {
                 .param("mode", "SAMPLE"), owner, null).andExpect(status().isBadRequest());
         call(get("/api/v1/supplier-offer-drafts/" + imported.get("draftId").asText()), other, null)
                 .andExpect(status().isNotFound());
+
+        JsonNode reviewed = body(call(put("/api/v1/supplier-offer-drafts/" + imported.get("draftId").asText() + "/lines/1"), owner,
+                Map.of("version", 0, "reviewedName", "테스트 생활용품 박스", "supplierSku", "1002",
+                        "quantityUnit", "EA", "minimumQuantity", 5, "unitPrice", 4500))
+                .andExpect(status().isOk()));
+        JsonNode confirmed = body(call(post("/api/v1/supplier-offer-drafts/" + imported.get("draftId").asText() + "/confirm"), owner,
+                Map.of("version", reviewed.get("version").asLong())).andExpect(status().isOk()));
+        call(post("/api/v1/supplier-offer-drafts/" + imported.get("draftId").asText() + "/selections"), owner,
+                Map.of("version", confirmed.get("version").asLong(), "lines",
+                        List.of(Map.of("lineNumber", 1, "desiredQuantity", 86))))
+                .andExpect(status().isBadRequest());
+        JsonNode selection = body(call(post("/api/v1/supplier-offer-drafts/" + imported.get("draftId").asText() + "/selections"), owner,
+                Map.of("version", confirmed.get("version").asLong(), "lines",
+                        List.of(Map.of("lineNumber", 1, "desiredQuantity", 20))))
+                .andExpect(status().isCreated()));
+        JsonNode quote = body(call(get("/api/v1/quotes/" + selection.get("quoteId").asText()), owner, null)
+                .andExpect(status().isOk()));
+        assertThat(quote.at("/lines/0/unitPrice").decimalValue()).isEqualByComparingTo("4100");
     }
 
     @Test

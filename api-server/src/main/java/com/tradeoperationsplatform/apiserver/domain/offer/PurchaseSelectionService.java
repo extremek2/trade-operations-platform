@@ -14,6 +14,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.*;
 
 @Service
@@ -52,6 +53,8 @@ public class PurchaseSelectionService {
                 throw new BusinessException("희망 수량을 기록하려면 확인된 수량 단위가 필요합니다.");
             if (offerLine.getMinimumQuantity() != null && input.desiredQuantity().compareTo(offerLine.getMinimumQuantity()) < 0)
                 throw new BusinessException("희망 수량이 공급처 MOQ보다 적습니다.");
+            if (offerLine.getAvailableQuantity() != null && input.desiredQuantity().compareTo(offerLine.getAvailableQuantity()) > 0)
+                throw new BusinessException("희망 수량이 조회 당시 재고보다 많습니다.");
             Product product = null;
             if (input.existingProductId() != null) {
                 if (!uniqueExistingProducts.add(input.existingProductId()))
@@ -82,9 +85,10 @@ public class PurchaseSelectionService {
                 }
                 resolvedProducts.add(product);
                 SupplierOfferDraftLine line = item.offerLine();
+                BigDecimal resolvedUnitPrice = line.unitPriceFor(item.desiredQuantity());
                 quote.addLine(new SupplierQuoteLine(quote, product, quoteLineNumber++, line.getSupplierSku(),
                         line.getReviewedName(), line.getMinimumQuantity(), line.getQuantityUnit(),
-                        line.getUnitPrice(), line.getCountryOfOrigin(), null, line.getNotes()));
+                        resolvedUnitPrice, line.getCountryOfOrigin(), null, line.getNotes()));
             }
             quotes.saveAndFlush(quote);
             PurchaseSelection selection = new PurchaseSelection(actor.organization(), draft, quote, actor.user());

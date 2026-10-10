@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -87,7 +88,7 @@ public class DomeggookCatalogGateway {
             if (id == null || title == null) continue;
             Element deli = child(item, "deli");
             rows.add(new WholesaleCatalogItem("DOMEGGOOK", mode.name(), id, value(item, "id"), title,
-                    decimal(value(item, "price")), integer(value(item, "unitQty")), null, null,
+                    decimal(value(item, "price")), integer(value(item, "unitQty")), null, List.of(),
                     Boolean.parseBoolean(value(item, "comOnly")), Boolean.parseBoolean(value(deli, "fromOversea")),
                     value(deli, "fee"), mode == Mode.SAMPLE ? null : safeProductUrl(value(item, "url"), id),
                     LocalDateTime.now(), true));
@@ -112,10 +113,11 @@ public class DomeggookCatalogGateway {
             throw new BusinessException("상품 목록과 상세의 판매자가 다릅니다.");
         String tierText = value(price, "dome");
         boolean tiered = tierText != null && tierText.contains("+");
+        List<WholesalePriceTier> priceTiers = tiered ? priceTiers(tierText) : List.of();
         BigDecimal unitPrice = tiered ? null : decimal(tierText);
         Integer minimum = integer(value(qty, "domeMoq"));
         if (minimum == null) minimum = listing.minimumQuantity();
-        if (tierText == null || minimum == null || minimum < 1)
+        if (tierText == null || (!tiered && unitPrice == null) || minimum == null || minimum < 1)
             throw new BusinessException("도매 가격 또는 최소구매수량을 확인할 수 없습니다.");
         Element domeDeli = child(deli, "dome");
         String shippingFee = value(domeDeli, "fee");
@@ -123,7 +125,7 @@ public class DomeggookCatalogGateway {
         if (shippingFee == null) shippingFee = listing.shippingFee();
         return new WholesaleCatalogItem("DOMEGGOOK", mode.name(), listing.itemId(), sellerId,
                 value(basis, "title") == null ? listing.title() : value(basis, "title"), unitPrice,
-                minimum, integer(value(qty, "inventory")), tiered ? tierText : null,
+                minimum, integer(value(qty, "inventory")), priceTiers,
                 listing.businessOnly(), Boolean.parseBoolean(value(deli, "fromOversea")),
                 shippingFee, listing.productUrl(), LocalDateTime.now(), true);
     }
@@ -207,6 +209,30 @@ public class DomeggookCatalogGateway {
         if (value == null) return null;
         try { return Integer.valueOf(value); }
         catch (NumberFormatException e) { return null; }
+    }
+    static List<WholesalePriceTier> priceTiers(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        try {
+            List<WholesalePriceTier> tiers = new ArrayList<>();
+            for (String token : value.split("\\|")) {
+                String[] fields = token.trim().split("\\+", -1);
+                if (fields.length != 2) throw new IllegalArgumentException();
+                tiers.add(new WholesalePriceTier(decimalRequired(fields[0]), decimalRequired(fields[1])));
+            }
+            tiers.sort(Comparator.comparing(WholesalePriceTier::minimumQuantity));
+            for (int index = 1; index < tiers.size(); index++) {
+                if (tiers.get(index - 1).minimumQuantity().compareTo(tiers.get(index).minimumQuantity()) == 0)
+                    throw new IllegalArgumentException();
+            }
+            return List.copyOf(tiers);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("수량별 단가 형식을 확인할 수 없습니다.");
+        }
+    }
+    private static BigDecimal decimalRequired(String value) {
+        BigDecimal parsed = decimal(value);
+        if (parsed == null) throw new IllegalArgumentException();
+        return parsed;
     }
     private static String safeProductUrl(String candidate, String id) {
         if (candidate != null && candidate.startsWith("https://") && candidate.length() <= 255) return candidate;

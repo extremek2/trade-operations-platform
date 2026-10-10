@@ -18,6 +18,10 @@ const initialDocumentForm = { supplierId: "", sourceReference: "", file: null };
 const initialCatalogForm = { mode: "SAMPLE", keyword: "테스트" };
 const optionalNumber = value => value === "" ? undefined : Number(value);
 const optionalText = value => value.trim() || undefined;
+const tierUnitPrice = (tiers, quantity, fallback) => (tiers || []).reduce(
+  (price, tier) => Number(quantity) >= Number(tier.minimumQuantity) ? Number(tier.unitPrice) : price,
+  fallback == null ? null : Number(fallback));
+const tierLabel = tier => `${Number(tier.minimumQuantity).toLocaleString()}개 이상 ${Number(tier.unitPrice).toLocaleString()}원`;
 
 const documentSources = ["PDF", "IMAGE"];
 const initialReviewRow = line => ({
@@ -154,7 +158,9 @@ function ReviewLine({ draft, line, editable, saving, run }) {
       <div className="form-grid four">
         <label>MOQ <span className="optional">미확인 가능</span><input type="number" min="0.000001" step="any" value={form.minimumQuantity} onChange={event => update("minimumQuantity", event.target.value)}/></label>
         <label>수량 단위<input maxLength="30" value={form.quantityUnit} onChange={event => update("quantityUnit", event.target.value)}/></label>
-        <label>단가 <span className="optional">미확인 가능</span><input type="number" min="0" step="0.0001" value={form.unitPrice} onChange={event => update("unitPrice", event.target.value)}/></label>
+        <label>단가 <span className="optional">{line.priceTiers?.length ? "희망 수량에 따라 자동 적용" : "미확인 가능"}</span>
+          <input type="number" min="0" step="0.0001" disabled={line.priceTiers?.length > 0}
+            value={form.unitPrice} onChange={event => update("unitPrice", event.target.value)}/></label>
         <label>원산지 <span className="optional">선택</span><input pattern="[A-Za-z]{2}" maxLength="2" value={form.countryOfOrigin} onChange={event => update("countryOfOrigin", event.target.value.toUpperCase())}/></label>
       </div>
       <label>메모 <span className="optional">선택</span><input maxLength="1000" value={form.notes} onChange={event => update("notes", event.target.value)}/></label>
@@ -190,7 +196,8 @@ function SelectionForm({ draft, selectedNumbers, products, saving, run }) {
       {!line.quantityUnit && <p className="muted">수량 단위가 미확인이라 이 행은 아직 선택할 수 없습니다.</p>}
       <p>{line.minimumQuantity == null ? "MOQ 미확인" : `MOQ ${line.minimumQuantity} ${line.quantityUnit || ""}`} · {line.unitPrice == null ? "단가 미확인" : `${draft.currency} ${line.unitPrice}`}</p>
       <div className="form-grid two">
-        <label>희망 수량<input type="number" min={line.minimumQuantity || "0.000001"} step="any" disabled={!choices[line.lineNumber]?.checked}
+        <label>희망 수량<input type="number" min={line.minimumQuantity || "0.000001"} max={line.availableQuantity || undefined}
+          step="any" disabled={!choices[line.lineNumber]?.checked}
           value={choices[line.lineNumber]?.quantity ?? String(line.minimumQuantity || 1)}
           onChange={event => update(line.lineNumber, { quantity: event.target.value })}/></label>
         <label>기존 상품 연결 <span className="optional">비우면 신규 등록</span>
@@ -202,6 +209,12 @@ function SelectionForm({ draft, selectedNumbers, products, saving, run }) {
           </select>
         </label>
       </div>
+      {line.priceTiers?.length > 0 && <p className="muted" aria-live="polite">
+        희망 수량 적용 단가 KRW {tierUnitPrice(line.priceTiers,
+          choices[line.lineNumber]?.quantity ?? line.minimumQuantity ?? 1, line.unitPrice)?.toLocaleString()}
+        {" · "}구간 {line.priceTiers.map(tierLabel).join(" / ")}
+      </p>}
+      {line.availableQuantity != null && <p className="muted">조회 당시 재고 {Number(line.availableQuantity).toLocaleString()} {line.quantityUnit}</p>}
     </fieldset>)}
     <button className="button primary" disabled={saving || !available.some(line => choices[line.lineNumber]?.checked)}>선택 행을 견적으로 넘기기</button>
   </form>;
@@ -359,7 +372,7 @@ export default function SupplierOfferPage({ navigate }) {
       {catalogDetail && <article className="quote-entry" aria-label="도매 상품 상세">
         <h3>{catalogDetail.title}</h3>
         <p>판매자 {catalogDetail.sellerId} · MOQ {catalogDetail.minimumQuantity}개 · 조회 시각 {catalogDetail.fetchedAt}</p>
-        <p>{catalogDetail.priceTiers ? `수량별 단가 ${catalogDetail.priceTiers} · 선택 수량의 단가를 직접 확인하세요.`
+        <p>{catalogDetail.priceTiers?.length > 0 ? `수량별 단가 ${catalogDetail.priceTiers.map(tierLabel).join(" / ")}`
           : `조회 단가 KRW ${catalogDetail.unitPrice?.toLocaleString() || "미확인"}`}</p>
         <p>조회 당시 재고 {catalogDetail.availableQuantity ?? "미확인"}개 · 배송비 {catalogDetail.shippingFee || "미확인"}
           {catalogDetail.businessOnly ? " · 사업자 회원 구매 상품" : ""}{catalogDetail.overseasShipping ? " · 해외직배송" : ""}</p>
