@@ -26,6 +26,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -200,6 +206,94 @@ class TradeCycleIntegrationTest extends PostgresTestSupport {
     }
 
     @Test
+    void concurrentAggregateUpdatesPreserveQuantityAndCostCloseInvariants() throws Exception {
+        JsonNode scenario = selectedScenario(ownerToken);
+        JsonNode created = body(call(post("/api/v1/trade-cycles/purchase-orders"), ownerToken, Map.of(
+                "costScenarioIds", List.of(scenario.get("scenarioId").asText()),
+                "orderNumber", "PO-CONCURRENT-" + UUID.randomUUID()))
+                .andExpect(status().isCreated()));
+        String orderId = created.at("/purchaseOrder/purchaseOrderId").asText();
+        String lineId = created.at("/purchaseOrder/lines/0/purchaseOrderLineId").asText();
+        body(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/approve"), ownerToken,
+                Map.of("version", 0)).andExpect(status().isOk()));
+
+        JsonNode firstShipment = shipment(ownerToken, "CONCURRENT-A-");
+        JsonNode secondShipment = shipment(ownerToken, "CONCURRENT-B-");
+        String firstShipmentId = firstShipment.get("shipmentId").asText();
+        String secondShipmentId = secondShipment.get("shipmentId").asText();
+        List<Integer> allocationStatuses = runConcurrently(List.of(
+                () -> responseStatus(call(post("/api/v1/trade-cycles/shipment-allocations"), ownerToken, Map.of(
+                        "shipmentId", firstShipmentId, "purchaseOrderLineId", lineId, "quantity", 6))),
+                () -> responseStatus(call(post("/api/v1/trade-cycles/shipment-allocations"), ownerToken, Map.of(
+                        "shipmentId", secondShipmentId, "purchaseOrderLineId", lineId, "quantity", 6)))
+        ));
+        assertThat(allocationStatuses).containsExactlyInAnyOrder(201, 400);
+
+        JsonNode partiallyAllocated = body(call(get("/api/v1/trade-cycles/purchase-orders/" + orderId), ownerToken, null)
+                .andExpect(status().isOk()));
+        assertThat(partiallyAllocated.at("/purchaseOrder/lines/0/shippedQuantity").decimalValue())
+                .isEqualByComparingTo("6");
+        String usedShipmentId = partiallyAllocated.at("/shipmentAllocations/0/shipmentId").asText();
+        String remainingShipmentId = usedShipmentId.equals(firstShipmentId) ? secondShipmentId : firstShipmentId;
+        JsonNode fullyAllocated = body(call(post("/api/v1/trade-cycles/shipment-allocations"), ownerToken, Map.of(
+                "shipmentId", remainingShipmentId, "purchaseOrderLineId", lineId, "quantity", 4))
+                .andExpect(status().isCreated()));
+
+        JsonNode sixUnitAllocation = null;
+        JsonNode fourUnitAllocation = null;
+        for (JsonNode allocation : fullyAllocated.at("/shipmentAllocations")) {
+            if (allocation.get("allocatedQuantity").decimalValue().compareTo(BigDecimal.valueOf(6)) == 0)
+                sixUnitAllocation = allocation;
+            else fourUnitAllocation = allocation;
+        }
+        assertThat(sixUnitAllocation).isNotNull();
+        assertThat(fourUnitAllocation).isNotNull();
+        String sixAllocationId = sixUnitAllocation.get("allocationId").asText();
+        String sixShipmentId = sixUnitAllocation.get("shipmentId").asText();
+        List<Integer> receiptStatuses = runConcurrently(List.of(
+                () -> concurrentReceiptStatus(sixShipmentId, sixAllocationId, 4),
+                () -> concurrentReceiptStatus(sixShipmentId, sixAllocationId, 4)
+        ));
+        assertThat(receiptStatuses).containsExactlyInAnyOrder(201, 400);
+
+        JsonNode afterConcurrentReceipt = body(call(get("/api/v1/trade-cycles/purchase-orders/" + orderId), ownerToken, null)
+                .andExpect(status().isOk()));
+        JsonNode protectedAllocation = null;
+        for (JsonNode allocation : afterConcurrentReceipt.at("/shipmentAllocations")) {
+            if (allocation.get("allocationId").asText().equals(sixAllocationId)) protectedAllocation = allocation;
+        }
+        assertThat(protectedAllocation).isNotNull();
+        assertThat(protectedAllocation.get("receivedQuantity").decimalValue()).isEqualByComparingTo("4");
+
+        receive(ownerToken, sixShipmentId, sixAllocationId, 2, "LOT-CONCURRENT-REST-");
+        JsonNode completed = receive(ownerToken, fourUnitAllocation.get("shipmentId").asText(),
+                fourUnitAllocation.get("allocationId").asText(), 4, "LOT-CONCURRENT-LAST-");
+        assertThat(completed.at("/purchaseOrder/status").asText()).isEqualTo("COMPLETED");
+        assertThat(completed.at("/purchaseOrder/lines/0/receivedQuantity").decimalValue())
+                .isEqualByComparingTo("10");
+
+        body(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/actual-costs"), ownerToken,
+                Map.of("costType", "PRODUCT", "description", "기준 실제 상품대", "amountKrw", 100000))
+                .andExpect(status().isCreated()));
+        List<Integer> costStatuses = runConcurrently(List.of(
+                () -> responseStatus(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/actual-costs"),
+                        ownerToken, Map.of("costType", "FREIGHT", "description", "동시 국제운임", "amountKrw", 20000))),
+                () -> responseStatus(call(post("/api/v1/trade-cycles/purchase-orders/" + orderId + "/cost-close"),
+                        ownerToken, null))
+        ));
+        assertThat(costStatuses.get(0)).isIn(201, 400);
+        assertThat(costStatuses.get(1)).isEqualTo(200);
+
+        JsonNode closed = body(call(get("/api/v1/trade-cycles/purchase-orders/" + orderId), ownerToken, null)
+                .andExpect(status().isOk()));
+        BigDecimal persistedCostTotal = BigDecimal.ZERO;
+        for (JsonNode cost : closed.at("/actualCosts"))
+            persistedCostTotal = persistedCostTotal.add(cost.get("amountKrw").decimalValue());
+        assertThat(closed.at("/costClose/actualTotalKrw").decimalValue())
+                .isEqualByComparingTo(persistedCostTotal);
+    }
+
+    @Test
     void selectedScenariosFromOneQuoteCreateMultiItemOrderAndCannotBeReused() throws Exception {
         List<JsonNode> selected = selectedScenarios(ownerToken);
         List<String> scenarioIds = selected.stream().map(item -> item.get("scenarioId").asText()).toList();
@@ -260,6 +354,38 @@ class TradeCycleIntegrationTest extends PostgresTestSupport {
                 "shipmentId", shipmentId, "receiptNumber", "RCV-" + UUID.randomUUID(),
                 "lines", List.of(Map.of("allocationId", allocationId, "quantity", quantity,
                         "lotNumber", lotPrefix + UUID.randomUUID())))).andExpect(status().isCreated()));
+    }
+
+    private int concurrentReceiptStatus(String shipmentId, String allocationId, int quantity) throws Exception {
+        return responseStatus(call(post("/api/v1/trade-cycles/receipts"), ownerToken, Map.of(
+                "shipmentId", shipmentId, "receiptNumber", "RCV-CONCURRENT-" + UUID.randomUUID(),
+                "lines", List.of(Map.of("allocationId", allocationId, "quantity", quantity,
+                        "lotNumber", "LOT-CONCURRENT-" + UUID.randomUUID())))));
+    }
+
+    private List<Integer> runConcurrently(List<Callable<Integer>> calls) throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(calls.size());
+        CountDownLatch ready = new CountDownLatch(calls.size());
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<Integer>> futures = calls.stream().map(call -> executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("동시 요청 시작 대기시간을 초과했습니다.");
+                return call.call();
+            })).toList();
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            return futures.stream().map(future -> {
+                try { return future.get(30, TimeUnit.SECONDS); }
+                catch (Exception e) { throw new IllegalStateException(e); }
+            }).toList();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private int responseStatus(ResultActions result) {
+        return result.andReturn().getResponse().getStatus();
     }
 
     private JsonNode shipment(String token, String prefix) throws Exception {

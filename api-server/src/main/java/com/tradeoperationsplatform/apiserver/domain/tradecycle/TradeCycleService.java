@@ -199,7 +199,7 @@ public class TradeCycleService {
         ShipmentCase shipment = shipments.findByPublicIdAndOwnerOrganizationPublicId(
                         request.shipmentId(), actor.organization().getPublicId())
                 .orElseThrow(() -> new ResourceNotFoundException("해당 조직의 화물을 찾을 수 없습니다."));
-        PurchaseOrderLine line = orderLines.findByPublicIdAndPurchaseOrderOrganizationId(
+        PurchaseOrderLine line = orderLines.findForUpdate(
                         request.purchaseOrderLineId(), organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("발주 품목을 찾을 수 없습니다."));
         PurchaseOrder order = line.getPurchaseOrder();
@@ -242,13 +242,16 @@ public class TradeCycleService {
         Set<UUID> allocationIds = new HashSet<>();
         Set<String> lotNumbers = new HashSet<>();
         List<ResolvedReceipt> resolved = new ArrayList<>();
-        for (TradeCycleRequests.ReceiptEntry entry : request.lines()) {
+        List<TradeCycleRequests.ReceiptEntry> entries = request.lines().stream()
+                .sorted(Comparator.comparing(TradeCycleRequests.ReceiptEntry::allocationId))
+                .toList();
+        for (TradeCycleRequests.ReceiptEntry entry : entries) {
             if (!allocationIds.add(entry.allocationId())) throw new BusinessException("한 입고에 같은 선적 배정을 중복 입력할 수 없습니다.");
             String lotNumber = entry.lotNumber().trim();
             if (!lotNumbers.add(lotNumber) || lots.existsByOrganizationIdAndLotNumber(organizationId, lotNumber)) {
                 throw new ConflictException("조직 내에서 이미 사용 중인 로트번호입니다: " + lotNumber);
             }
-            ShipmentAllocation allocation = allocations.findByPublicIdAndOrganizationId(entry.allocationId(), organizationId)
+            ShipmentAllocation allocation = allocations.findForUpdate(entry.allocationId(), organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("선적 배정을 찾을 수 없습니다."));
             if (allocation.getPurchaseOrderLine().getPurchaseOrder().getProcurementRoute()
                     != PurchaseOrder.ProcurementRoute.IMPORT)
@@ -282,7 +285,7 @@ public class TradeCycleService {
     public TradeCycleResponse receiveDomestic(UUID orderId, TradeCycleRequests.CreateDomesticReceipt request) {
         var actor = currentActor.require();
         Long organizationId = actor.organization().getId();
-        PurchaseOrder order = requireOrder(orderId);
+        PurchaseOrder order = requireOrderForUpdate(orderId);
         checkVersion(order, request.version());
         if (order.getProcurementRoute() != PurchaseOrder.ProcurementRoute.DOMESTIC_STOCK)
             throw new BusinessException("국내 재고 매입 발주만 직접 입고할 수 있습니다.");
@@ -329,7 +332,7 @@ public class TradeCycleService {
     @Transactional
     public TradeCycleResponse addActualCost(UUID orderId, TradeCycleRequests.AddActualCost request) {
         var actor = currentActor.require();
-        PurchaseOrder order = requireOrder(orderId);
+        PurchaseOrder order = requireOrderForUpdate(orderId);
         if (costCloses.existsByPurchaseOrderId(order.getId())) throw new BusinessException("원가 마감 후에는 실제 비용을 추가할 수 없습니다.");
         try {
             actualCosts.save(new ActualCostItem(actor.organization(), actor.user(), order, request.costType(),
@@ -341,7 +344,7 @@ public class TradeCycleService {
     @Transactional
     public TradeCycleResponse closeCost(UUID orderId) {
         var actor = currentActor.require();
-        PurchaseOrder order = requireOrder(orderId);
+        PurchaseOrder order = requireOrderForUpdate(orderId);
         if (order.getStatus() != PurchaseOrder.Status.COMPLETED) throw new BusinessException("전량 입고가 완료된 발주만 실제 원가를 마감할 수 있습니다.");
         if (costCloses.existsByPurchaseOrderId(order.getId())) throw new ConflictException("이미 실제 원가를 마감한 발주입니다.");
         List<ActualCostItem> items = actualCosts.findAllByPurchaseOrderIdOrderByCreatedAtAsc(order.getId());
@@ -405,6 +408,12 @@ public class TradeCycleService {
     private PurchaseOrder requireOrder(UUID orderId) {
         Long organizationId = currentActor.require().organization().getId();
         return orders.findByPublicIdAndOrganizationId(orderId, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("발주를 찾을 수 없습니다."));
+    }
+
+    private PurchaseOrder requireOrderForUpdate(UUID orderId) {
+        Long organizationId = currentActor.require().organization().getId();
+        return orders.findForUpdate(orderId, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("발주를 찾을 수 없습니다."));
     }
 
