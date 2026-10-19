@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { randomUUID } = require('crypto');
 const API = 'http://127.0.0.1:18080';
+const WEB = `http://localhost:${process.env.E2E_WEB_PORT || '3100'}`;
 const PASSWORD = 'E2e-password-123!';
 
 async function signup(page, company, email) {
@@ -20,7 +21,7 @@ async function verify(page, request, email) {
   const message = await response.json();
   const link = message.body.split('\n').at(-1);
   await page.goto(link);
-  await expect(page).toHaveURL('http://localhost:3000/verify-email');
+  await expect(page).toHaveURL(`${WEB}/verify-email`);
   await page.getByRole('button', { name: '이메일 확인 완료하기' }).click();
   await expect(page.getByText('이메일 확인이 완료되었습니다.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '신청 상태 확인' }).click();
@@ -30,7 +31,7 @@ async function verify(page, request, email) {
 async function adminLogin(browser) {
   const context = await browser.newContext();
   const page = await context.newPage();
-  await page.goto('http://localhost:3000/system-admin/login');
+  await page.goto(`${WEB}/system-admin/login`);
   await page.getByLabel('이메일', { exact: true }).fill('admin@example.test');
   await page.getByLabel('비밀번호', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
@@ -67,7 +68,7 @@ test('가입 → 이메일 확인 → 관리자 승인 → 화주 작업 공간,
     await expect(page.getByRole('button', { name: '작업 공간으로 이동' })).toBeVisible();
     await expect(page.getByText('이 메모는 관리자만 확인')).toHaveCount(0);
     await page.getByRole('button', { name: '작업 공간으로 이동' }).click();
-    await expect(page).toHaveURL('http://localhost:3000/');
+    await expect(page).toHaveURL(`${WEB}/`);
     await expect(page.getByRole('button', { name: '화물 현황', exact: true })).toBeVisible();
     await expect(page.locator('.workspace-card')).toContainText(company);
     await page.goto('/system-admin/applications');
@@ -182,7 +183,7 @@ test('외부 업체별 3명 초대 → 이메일 건별 접속 → 문서번호 
     await expect(admin.page.getByText('조직 개설을 승인했습니다.', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: '상태 새로고침' }).click();
     await page.getByRole('button', { name: '작업 공간으로 이동' }).click();
-    await expect(page).toHaveURL('http://localhost:3000/');
+    await expect(page).toHaveURL(`${WEB}/`);
     const session = await (await page.request.post('http://localhost:18080/api/v1/auth/refresh')).json();
     const response = await page.request.post(`${API}/api/v1/shipments`, { headers: { Authorization: `Bearer ${session.data.accessToken}` }, data: { caseNumber: `CASE-${randomUUID()}`, direction: 'IMPORT', transportMode: 'SEA' } });
     expect(response.ok()).toBeTruthy(); const shipment = (await response.json()).data;
@@ -205,7 +206,7 @@ test('외부 업체별 3명 초대 → 이메일 건별 접속 → 문서번호 
     const mail = await (await request.post(`${API}/_e2e/mail?email=${encodeURIComponent(externalEmail)}`)).json();
     const link = mail.body.split('\n').at(-1);
     await externalPage.goto(link);
-    await expect(externalPage).toHaveURL('http://localhost:3000/external-access');
+    await expect(externalPage).toHaveURL(`${WEB}/external-access`);
     await externalPage.getByRole('button', { name: '초대 확인하고 건에 접속' }).click();
     await expect(externalPage.getByRole('heading', { name: shipment.caseNumber })).toBeVisible();
     await externalPage.getByLabel('문서번호', { exact: true }).fill('HBL-EXTERNAL-001');

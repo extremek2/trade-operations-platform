@@ -22,14 +22,16 @@ public class OnboardingE2eServer {
         PostgreSQLContainer<?> database = new PostgreSQLContainer<>("postgres:15-alpine");
         database.start();
         Runtime.getRuntime().addShutdownHook(new Thread(database::stop));
+        String webUrl = System.getenv().getOrDefault("E2E_WEB_URL", "http://localhost:3100");
         SpringApplication application = new SpringApplication(SpringServerApplication.class, FixtureConfiguration.class);
         application.setAdditionalProfiles("onboarding-e2e");
         var context = application.run("--server.address=127.0.0.1", "--server.port=18080",
                 "--spring.datasource.url=" + database.getJdbcUrl(),
                 "--spring.datasource.username=" + database.getUsername(), "--spring.datasource.password=" + database.getPassword(),
+                "--app.auth.allowed-origins=" + webUrl,
                 "--app.mail.outbox-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "--app.mail.dispatch-enabled=false",
-                "--app.mail.verification-url=http://localhost:3000/verify-email",
-                "--app.mail.case-access-url=http://localhost:3000/external-access");
+                "--app.mail.verification-url=" + webUrl + "/verify-email",
+                "--app.mail.case-access-url=" + webUrl + "/external-access");
         context.getBean(AdminBootstrapService.class).createInitialAdmin("admin@example.test", "테스트 관리자", "E2e-password-123!".toCharArray());
         context.getBean(TestMailbox.class).ready = true;
     }
