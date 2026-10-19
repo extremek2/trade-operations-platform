@@ -7,7 +7,7 @@ module.exports = defineConfig({
   workers: 1,
   timeout: 60000,
   reporter: "list",
-  use: { baseURL: webUrl, channel: "chrome", headless: true, screenshot: "only-on-failure" },
+  use: { baseURL: webUrl, channel: "chrome", headless: true, screenshot: "only-on-failure", actionTimeout: 15000 },
   webServer: [
     { command: "./gradlew onboardingE2eServer --no-daemon", cwd: "../api-server", url: "http://127.0.0.1:18080/_e2e/ready", timeout: 180000,
       reuseExistingServer: false, env: { E2E_WEB_URL: webUrl } },
