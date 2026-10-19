@@ -44,6 +44,19 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
       SMTP_SSL: ${SMTP_SSL:-false}
+      DOMEGGOOK_API_KEY: ${DOMEGGOOK_API_KEY:-}
+      OBJECT_STORAGE_ENABLED: ${OBJECT_STORAGE_ENABLED:-false}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://minio:9000}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-trade-ops-artifacts}
+      OBJECT_STORAGE_PATH_STYLE: ${OBJECT_STORAGE_PATH_STYLE:-true}
+      OBJECT_STORAGE_CREATE_BUCKET: ${OBJECT_STORAGE_CREATE_BUCKET:-false}
+      OCR_ENABLED: ${OCR_ENABLED:-false}
+      OCR_BASE_URL: ${OCR_BASE_URL:-http://ocr-worker:8090}
+      OCR_CONNECT_TIMEOUT_SECONDS: ${OCR_CONNECT_TIMEOUT_SECONDS:-3}
+      OCR_REQUEST_TIMEOUT_SECONDS: ${OCR_REQUEST_TIMEOUT_SECONDS:-180}
     networks: [private]
     healthcheck:
       test: [CMD, curl, --fail, --silent, 'http://localhost:8080/actuator/health/readiness']
@@ -78,6 +91,23 @@ services:
     networks:
       private:
         ipv4_address: 172.30.88.10
+  minio:
+    profiles: [documents]
+    build:
+      context: ./minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY:-}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_KEY:-}
+    volumes:
+      - production_minio:/data
+    networks: [private]
+  ocr-worker:
+    profiles: [documents]
+    build:
+      context: ../ocr-worker
+    restart: unless-stopped
+    networks: [private]
 networks:
   private:
     ipam:
@@ -85,3 +115,4 @@ networks:
         - subnet: 172.30.88.0/24
 volumes:
   production_postgres:
+  production_minio:

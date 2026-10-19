@@ -18,7 +18,7 @@ React -> Spring Boot -> PostgreSQL
 - 상품 원장: 후보와 판매 상품을 합친 `Product`
 - 거래처 원장: 공급사와 협업 업체를 합친 `BusinessPartner` + 역할
 - 소싱: `SupplierQuote` + `SupplierQuoteLine`
-- DB 설치 이력: V1 기준선부터 V14 공급처 상품 문의 연락처까지 순방향 migration
+- DB 설치 이력: V1 기준선부터 V18 발주 전 도매 카탈로그 재확인까지 순방향 migration
 - 선택적 OCR worker와 개발용 MinIO는 `documents` 프로필에 포함. Redis, Python DB Writer는 없음
 
 ## P0 — 경계 정리와 빈 DB 기준선
