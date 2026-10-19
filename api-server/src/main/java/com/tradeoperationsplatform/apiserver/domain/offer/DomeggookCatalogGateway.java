@@ -182,8 +182,14 @@ public class DomeggookCatalogGateway {
             factory.setXIncludeAware(false);
             factory.setExpandEntityReferences(false);
             Document doc = factory.newDocumentBuilder().parse(new InputSource(new StringReader(raw)));
-            Element error = first(doc.getDocumentElement(), "code");
-            if (error != null) throw new BusinessException("도매꾹 API 오류 코드: " + error.getTextContent().trim());
+            Element root = doc.getDocumentElement();
+            Element error = "error".equalsIgnoreCase(root.getTagName()) || "errors".equalsIgnoreCase(root.getTagName())
+                    ? root : child(root, "error");
+            if (error == null) error = child(root, "errors");
+            if (error != null) {
+                String code = value(error, "code");
+                throw new BusinessException("도매꾹 API 오류 코드: " + (code == null ? "UNKNOWN" : code));
+            }
             return doc;
         } catch (BusinessException e) {
             throw e;
