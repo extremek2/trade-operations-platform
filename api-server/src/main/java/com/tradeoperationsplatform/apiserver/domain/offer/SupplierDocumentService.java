@@ -42,6 +42,14 @@ public class SupplierDocumentService {
     private final ArtifactObjectStore objectStore;
     private final DocumentExtractionGateway extractionGateway;
 
+    public record CapabilityStatus(boolean storageEnabled, boolean extractionEnabled) {}
+
+    @Transactional(readOnly = true)
+    public CapabilityStatus capabilityStatus() {
+        currentActor.require();
+        return new CapabilityStatus(objectStore.isEnabled(), extractionGateway.isEnabled());
+    }
+
     @Transactional
     public SupplierDocumentResponse importDocument(UUID supplierId, String sourceReference, MultipartFile file) {
         var actor = currentActor.require();

@@ -67,6 +67,16 @@ class SupplierDocumentIntegrationTest extends PostgresTestSupport {
     }
 
     @Test
+    void reportsDocumentIntegrationCapabilities() throws Exception {
+        JsonNode status = body(mvc.perform(get("/api/v1/supplier-documents/status")
+                        .header("Authorization", "Bearer " + owner))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk()));
+
+        assertThat(status.get("storageEnabled").asBoolean()).isTrue();
+        assertThat(status.get("extractionEnabled").asBoolean()).isTrue();
+    }
+
+    @Test
     void archivesExtractsDeduplicatesAndDownloadsOriginalWithoutExposingObjectKey() throws Exception {
         JsonNode supplier = createSupplier(owner);
         byte[] pdf = Files.readAllBytes(Path.of("src/test/resources/fixtures/ocr/supplier-quotation-text.pdf"));

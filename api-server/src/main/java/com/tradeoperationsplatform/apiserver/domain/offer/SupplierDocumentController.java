@@ -48,6 +48,11 @@ public class SupplierDocumentController {
     @GetMapping
     public ApiResponse<List<SupplierDocumentResponse>> findAll() { return ApiResponse.ok(service.findAll()); }
 
+    @GetMapping("/status")
+    public ApiResponse<SupplierDocumentService.CapabilityStatus> capabilityStatus() {
+        return ApiResponse.ok(service.capabilityStatus());
+    }
+
     @GetMapping("/{documentId}")
     public ApiResponse<SupplierDocumentResponse> findOne(@PathVariable UUID documentId) {
         return ApiResponse.ok(service.findOne(documentId));

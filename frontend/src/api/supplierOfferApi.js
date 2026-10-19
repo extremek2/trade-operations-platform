@@ -44,6 +44,7 @@ export const createPurchaseSelection = (draftId, payload) =>
   });
 export const getPurchaseSelections = () => apiRequest("/purchase-selections");
 export const getSupplierDocuments = () => apiRequest("/supplier-documents");
+export const getSupplierDocumentStatus = () => apiRequest("/supplier-documents/status");
 export const importSupplierDocument = ({ supplierId, sourceReference, file }) => {
   const body = new FormData();
   body.append("supplierId", supplierId);
@@ -54,3 +55,5 @@ export const importSupplierDocument = ({ supplierId, sourceReference, file }) =>
 export const createDocumentDraft = (documentId, currency) =>
   apiRequest(`/supplier-documents/${documentId}/draft`, { method: "POST", body: JSON.stringify({ currency }) });
 export const getSupplierDocumentContent = documentId => apiBlob(`/supplier-documents/${documentId}/content`);
+export const retrySupplierDocumentExtraction = documentId =>
+  apiRequest(`/supplier-documents/${documentId}/extractions/retry`, { method: "POST" });

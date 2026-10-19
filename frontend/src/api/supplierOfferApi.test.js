@@ -1,5 +1,6 @@
 import { apiRequest } from "./client";
-import { createDocumentDraft, getWholesaleCatalogStatus, importSupplierDocument, importSupplierOfferFile } from "./supplierOfferApi";
+import { createDocumentDraft, getSupplierDocumentStatus, getWholesaleCatalogStatus, importSupplierDocument,
+  importSupplierOfferFile, retrySupplierDocumentExtraction } from "./supplierOfferApi";
 
 jest.mock("./client", () => ({ apiRequest: jest.fn() }));
 
@@ -39,4 +40,12 @@ test("문서 업로드와 검토 초안 생성을 별도 요청으로 보낸다"
   expect(apiRequest).toHaveBeenLastCalledWith("/supplier-documents/document-1/draft", {
     method: "POST", body: JSON.stringify({ currency: "JPY" }),
   });
+});
+
+test("문서 기능 상태를 조회하고 실패한 추출을 재시도한다", () => {
+  getSupplierDocumentStatus();
+  retrySupplierDocumentExtraction("document-1");
+
+  expect(apiRequest).toHaveBeenNthCalledWith(1, "/supplier-documents/status");
+  expect(apiRequest).toHaveBeenNthCalledWith(2, "/supplier-documents/document-1/extractions/retry", { method: "POST" });
 });

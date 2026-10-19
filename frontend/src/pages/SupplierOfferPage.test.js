@@ -2,7 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { getBusinessPartners } from "../api/partnerApi";
 import { getProducts } from "../api/productApi";
 import { createDocumentDraft, createPurchaseSelection, createSupplierOfferDraft, getPurchaseSelections,
-  getSupplierDocuments, getSupplierOfferDrafts, importSupplierDocument, importSupplierOfferFile } from "../api/supplierOfferApi";
+  getSupplierDocuments, getSupplierDocumentStatus, getSupplierOfferDrafts, importSupplierDocument, importSupplierOfferFile,
+  retrySupplierDocumentExtraction } from "../api/supplierOfferApi";
 import { getSupplierDocumentContent, reviewSupplierOfferDraft } from "../api/supplierOfferApi";
 import { searchWholesaleCatalog, getWholesaleCatalogItem, getWholesaleCatalogStatus, importWholesaleCatalogItem } from "../api/supplierOfferApi";
 import SupplierOfferPage from "./SupplierOfferPage";
@@ -13,8 +14,10 @@ jest.mock("../api/supplierOfferApi", () => ({
   confirmSupplierOfferDraft: jest.fn(), createDocumentDraft: jest.fn(), createPurchaseSelection: jest.fn(),
   createSupplierOfferDraft: jest.fn(), excludeSupplierOfferLine: jest.fn(),
   getPurchaseSelections: jest.fn(), getSupplierDocuments: jest.fn(), getSupplierDocumentContent: jest.fn(),
+  getSupplierDocumentStatus: jest.fn(),
   getSupplierOfferDrafts: jest.fn(), importSupplierDocument: jest.fn(), importSupplierOfferFile: jest.fn(), reviewSupplierOfferLine: jest.fn(),
   reviewSupplierOfferDraft: jest.fn(),
+  retrySupplierDocumentExtraction: jest.fn(),
   searchWholesaleCatalog: jest.fn(), getWholesaleCatalogItem: jest.fn(), getWholesaleCatalogStatus: jest.fn(), importWholesaleCatalogItem: jest.fn(),
 }));
 jest.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { role: "OWNER" } }) }));
@@ -37,11 +40,13 @@ beforeEach(() => {
   getProducts.mockResolvedValue([]);
   getSupplierOfferDrafts.mockResolvedValue([draft]);
   getSupplierDocuments.mockResolvedValue([]);
+  getSupplierDocumentStatus.mockResolvedValue({ storageEnabled: true, extractionEnabled: true });
   getPurchaseSelections.mockResolvedValue([]);
   createPurchaseSelection.mockResolvedValue({});
   createSupplierOfferDraft.mockResolvedValue({});
   importSupplierOfferFile.mockResolvedValue({});
   importSupplierDocument.mockResolvedValue({});
+  retrySupplierDocumentExtraction.mockResolvedValue({});
   createDocumentDraft.mockResolvedValue({});
   getSupplierDocumentContent.mockResolvedValue(new Blob(["%PDF-sample"], { type: "application/pdf" }));
   reviewSupplierOfferDraft.mockResolvedValue({});
@@ -68,6 +73,23 @@ test("서버 API 키가 설정되면 실제 도매 조회를 선택할 수 있�
   const searchForm = await screen.findByRole("form", { name: "도매 상품 검색" });
   await waitFor(() => expect(within(searchForm)
     .getByRole("option", { name: "도매꾹 실제 API · 서버 키 필요" })).toBeEnabled());
+});
+
+test("문서 저장소가 꺼져 있으면 업로드 폼 대신 운영 상태를 표시한다", async () => {
+  getSupplierDocumentStatus.mockResolvedValue({ storageEnabled: false, extractionEnabled: false });
+  render(<SupplierOfferPage navigate={jest.fn()}/>);
+
+  expect(await screen.findByText("문서 저장소가 비활성화되어 있습니다.")).toBeInTheDocument();
+  expect(screen.queryByRole("form", { name: "공급 문서 가져오기" })).not.toBeInTheDocument();
+});
+
+test("실패한 문서의 텍스트 추출을 화면에서 재시도한다", async () => {
+  getSupplierDocuments.mockResolvedValue([{ documentId: "doc-failed", originalFileName: "failed.pdf",
+    sourceType: "PDF", extractionStatus: "FAILED", errorMessage: "OCR 일시 실패" }]);
+  render(<SupplierOfferPage navigate={jest.fn()}/>);
+
+  fireEvent.click(await screen.findByRole("button", { name: "텍스트 추출 재시도" }));
+  await waitFor(() => expect(retrySupplierDocumentExtraction).toHaveBeenCalledWith("doc-failed"));
 });
 
 test("도매 사이트 샘플 상품을 상세 확인 후 검토 초안으로 가져온다", async () => {

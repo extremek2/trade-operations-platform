@@ -4,9 +4,10 @@ import { getProducts } from "../api/productApi";
 import {
   confirmSupplierOfferDraft, createDocumentDraft, createPurchaseSelection, createSupplierOfferDraft,
   excludeSupplierOfferLine, getPurchaseSelections, getSupplierDocumentContent, getSupplierDocuments,
-  getSupplierOfferDrafts, importSupplierDocument, importSupplierOfferFile,
+  getSupplierDocumentStatus, getSupplierOfferDrafts, importSupplierDocument, importSupplierOfferFile,
   reviewSupplierOfferDraft, reviewSupplierOfferLine, searchWholesaleCatalog,
   getWholesaleCatalogItem, getWholesaleCatalogStatus, importWholesaleCatalogItem,
+  retrySupplierDocumentExtraction,
 } from "../api/supplierOfferApi";
 import { EmptyState, ErrorMessage, LoadingState } from "../components/Feedback";
 import { useAuth } from "../context/AuthContext";
@@ -227,6 +228,7 @@ export default function SupplierOfferPage({ navigate }) {
   const [products, setProducts] = useState([]);
   const [drafts, setDrafts] = useState([]);
   const [documents, setDocuments] = useState([]);
+  const [documentStatus, setDocumentStatus] = useState({ storageEnabled: false, extractionEnabled: false, checked: false });
   const [documentForm, setDocumentForm] = useState(initialDocumentForm);
   const [documentInputKey, setDocumentInputKey] = useState(0);
   const [documentCurrencies, setDocumentCurrencies] = useState({});
@@ -247,13 +249,14 @@ export default function SupplierOfferPage({ navigate }) {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const [partnerRows, productRows, draftRows, selectionRows, documentRows, wholesaleStatus] = await Promise.all([
+      const [partnerRows, productRows, draftRows, selectionRows, documentRows, wholesaleStatus, supplierDocumentStatus] = await Promise.all([
         getBusinessPartners(), getProducts(), getSupplierOfferDrafts(), getPurchaseSelections(), getSupplierDocuments(),
-        getWholesaleCatalogStatus(),
+        getWholesaleCatalogStatus(), getSupplierDocumentStatus(),
       ]);
       setSuppliers(partnerRows.filter(item => item.roles.includes("SUPPLIER")));
       setProducts(productRows); setDrafts(draftRows); setSelections(selectionRows); setDocuments(documentRows);
       setCatalogStatus({ liveConfigured: wholesaleStatus.liveConfigured, checked: true });
+      setDocumentStatus({ ...supplierDocumentStatus, checked: true });
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }, []);
@@ -386,8 +389,11 @@ export default function SupplierOfferPage({ navigate }) {
     </section>
     {editable && <section className="panel"><div className="panel-header"><div><h2>PDF·이미지 문서 가져오기</h2>
       <p className="muted">원본을 보관하고 텍스트를 추출합니다. 초안의 각 행은 사람이 확인하기 전까지 구매 선택에 사용할 수 없습니다.</p></div></div>
-      {suppliers.length === 0 ? <EmptyState title="공급처가 없습니다." description="공급 견적 화면에서 공급처를 먼저 등록하세요."/> :
+      {documentStatus.checked && !documentStatus.storageEnabled ?
+        <EmptyState title="문서 저장소가 비활성화되어 있습니다." description="운영자가 객체 저장소를 연결하면 PDF·이미지 가져오기를 사용할 수 있습니다."/> :
+        suppliers.length === 0 ? <EmptyState title="공급처가 없습니다." description="공급 견적 화면에서 공급처를 먼저 등록하세요."/> :
         <form className="setup-form" aria-label="공급 문서 가져오기" onSubmit={submitDocument}>
+          {documentStatus.checked && !documentStatus.extractionEnabled && <p className="alert error">OCR 연결이 비활성화되어 원본만 보관되며 자동 텍스트 추출은 실패 상태로 기록됩니다.</p>}
           <label>공급처<select required value={documentForm.supplierId} onChange={event => updateDocument("supplierId", event.target.value)}>
             <option value="">선택</option>{suppliers.map(item => <option key={item.businessPartnerId} value={item.businessPartnerId}>{item.name}</option>)}
           </select></label>
@@ -408,6 +414,9 @@ export default function SupplierOfferPage({ navigate }) {
           {document.errorMessage && <p className="alert error">{document.errorMessage}</p>}
           <div className="form-actions">
             {!linkedDraft && <button type="button" className="button secondary" disabled={saving} onClick={() => showDocument(document)}>원본 표시</button>}
+            {editable && document.extractionStatus === "FAILED" && documentStatus.storageEnabled && documentStatus.extractionEnabled &&
+              <button type="button" className="button secondary" disabled={saving}
+                onClick={() => run(() => retrySupplierDocumentExtraction(document.documentId))}>텍스트 추출 재시도</button>}
             {editable && document.extractionStatus === "SUCCEEDED" && !linkedDraft && <>
               <label>통화<input aria-label={`${document.originalFileName} 통화`} pattern="[A-Za-z]{3}" maxLength="3"
                 value={documentCurrencies[document.documentId] || "JPY"}
