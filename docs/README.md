@@ -1,17 +1,18 @@
 # 프로젝트 문서 안내
 
-- 최종 검토일: 2026-10-10
+- 최종 검토일: 2026-11-06
 - 목적: 제품 범위, 목표 아키텍처, 구현 기록과 운영 적용 상태를 구분한다.
 
 ## 읽는 순서
 
-1. [통합 로드맵 v2](product/import-domestic-platform-roadmap-v2.md)에서 전체 제품 범위와 개발 순서를 확인한다.
-2. [Import OS V0 PRD](product/prd.md)에서 이번 개발·검증 범위를 확인한다.
-3. [BM Stage 1](product/bm-stage-1-market-to-bm.md), [시장조사 Stage 1](product/market-stage-1.md), [지원사업 매칭 Stage 1](product/program-stage-1.md) 순서로 IR 전 근거와 게이트를 확인한다.
-4. [IR 초안](ir/README.md)에서 현재 발표 메시지, 근거와 다음 검증 과제를 확인한다.
-5. [기술 스택 및 아키텍처 기준](product/TECH_STACK.md)에서 런타임·데이터 소유권·통신 원칙을 확인한다.
-6. 실제 구현 여부는 `engineering/` 단계 문서와 현재 코드를 함께 확인한다.
-7. 실제 배포·DB 적용 여부는 운영 실행 기록으로 별도 확인한다.
+1. [최신 종단 거래 사이클 인계](engineering/end-to-end-trade-cycle-handoff.md)에서 현재 기준점과 다음 실행 단계를 확인한다.
+2. [통합 로드맵 v2](product/import-domestic-platform-roadmap-v2.md)에서 전체 제품 범위와 개발 순서를 확인한다.
+3. [Import OS V0 PRD](product/prd.md)에서 이번 개발·검증 범위를 확인한다.
+4. [BM Stage 1](product/bm-stage-1-market-to-bm.md), [시장조사 Stage 1](product/market-stage-1.md), [지원사업 매칭 Stage 1](product/program-stage-1.md) 순서로 IR 전 근거와 게이트를 확인한다.
+5. [IR 초안](ir/README.md)에서 현재 발표 메시지, 근거와 다음 검증 과제를 확인한다.
+6. [기술 스택 및 아키텍처 기준](product/TECH_STACK.md)에서 런타임·데이터 소유권·통신 원칙을 확인한다.
+7. 실제 구현 여부는 `engineering/` 단계 문서와 현재 코드를 함께 확인한다.
+8. 실제 배포·DB 적용 여부는 운영 실행 기록으로 별도 확인한다.
 
 [PMF 검증·마케팅 작업 현황](pmf/README.md)은 제품 분석, 고객 발굴, 네이버 블로그 임시저장의 2026-09-15 기준 상태와 보관 자료를 정리한다.
 
@@ -31,7 +32,7 @@
 
 | 문서 | 역할 | 현재 상태 |
 |---|---|---|
-| [통합 로드맵 v2](product/import-domestic-platform-roadmap-v2.md) | 국내외 발굴·소싱·수입·판매 전체 순서 | 활성 구현 계획 |
+| [통합 로드맵 v2](product/import-domestic-platform-roadmap-v2.md) | 국내외 발굴·소싱·수입·판매 전체 순서 | 기술 MVP 이후 실데이터 검증 계획 |
 | [TradeGuard Ops PRD](product/prd.md) | 수입 운영 통제 모듈의 제품 가설·목표 설계 | 검증 전 PRD, 구현 완료 문서 아님 |
 | [BM Stage 1](product/bm-stage-1-market-to-bm.md) | 고객·문제·대체재·가격 증거와 BM 확정 Gate | IR 전 검증 기준 |
 | [시장조사 Stage 1](product/market-stage-1.md) | 공식 시장 근거, 인터뷰와 SOM 교차검증 | IR 전 검증 기준 |
@@ -56,6 +57,9 @@
 | [코어 도메인 실행 계획](architecture/P0_EXECUTION_PLAN.md) | P0~P5 첫 수직 사이클 완료, P6 공급 문서 OCR 결과부터 검토 초안·다품목 거래 사이클까지 연결 |
 
 ## 구현·검증 기록
+
+[최신 종단 거래 사이클 인계](engineering/end-to-end-trade-cycle-handoff.md)는 2026-11-06 기준
+기술 MVP의 완료 범위, 최신 전체 검증, Git 기준선과 V0 실데이터 검증 순서를 기록한다.
 
 `engineering/identity-stage-1.md`부터 `identity-stage-6.md`까지는 가입 승인과 건별 외부 참여 작업의 단계별 기록이다. 각 문서의 테스트 수치와 마이그레이션 범위는 작성 당시의 결과이며, 최신 전체 검증을 뜻하지 않는다.
 
