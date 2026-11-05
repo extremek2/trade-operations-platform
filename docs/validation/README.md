@@ -3,7 +3,7 @@
 - 시작일: 2026-11-06
 - 작업 브랜치: `feature/v0-real-data-validation`
 - 기준선: `847b27b` (`docs: hand off end-to-end trade cycle baseline`)
-- 현재 단계: V0V-0 기준선 보호와 V0V-1 파일럿 입력 준비
+- 현재 단계: V0V-0 `main` PR 대기와 V0V-1 파일럿 3건 선정
 - 최신 인계: [종단 거래 사이클 기준선 인계](../engineering/end-to-end-trade-cycle-handoff.md)
 
 ## 목표
@@ -19,7 +19,7 @@
 
 | 단계 | 상태 | 완료 기준 |
 |---|---|---|
-| V0V-0 기준선 보호 | 진행 중 | 종료 브랜치 원격 반영, `main` PR, CI 전체 통과 |
+| V0V-0 기준선 보호 | CI 완료, PR 대기 | 종료 브랜치 원격 반영, `main` PR, CI 전체 통과 |
 | V0V-1 파일럿 입력 계약 | 준비됨 | 3개 상품과 증거 사용·보관 권한, 측정 기준 확정 |
 | V0V-2 실제 사이클 완주 | 대기 | 해외 1건 포함 3개 상품의 원가·판매 관측·결정 기록 |
 | V0V-3 필요한 연동 실증 | 대기 | 실제로 사용한 라이브/API/문서 실패의 회귀 fixture |
@@ -77,6 +77,7 @@
 | 날짜 | 기준 커밋 | 완료 | 검증 | 다음 단계 |
 |---|---|---|---|---|
 | 2026-11-06 | `847b27b` | 기술 MVP 인계, 원격 기준선 반영, 검증 브랜치 분리 | 인계문서의 전체 검증 결과 참조 | CI 최초 실행과 파일럿 3건 선정 |
+| 2026-11-06 | `25cd737` | 품질 CI와 파일럿 측정 계약·케이스 템플릿 추가 | [Actions 42090726754](https://github.com/extremek2/trade-operations-platform/actions/runs/42090726754): backend, frontend, compose, OCR, browser E2E 모두 성공 | 종료 브랜치의 `main` PR과 파일럿 3건 선정 |
 
 ## 단계 종료 시 인계
 
