@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<domeggook><basis><no>1002</no><title>테스트 생활용품 박스</title></basis><price><dome>1+4500|20+4100|50+3800</dome></price><qty><inventory>85</inventory><domeMoq>5</domeMoq></qty><seller><id>sample_household</id></seller><deli><fromOversea>false</fromOversea><dome><tbl>1+4000|20+5000</tbl></dome></deli><channel><dome>true</dome></channel></domeggook>

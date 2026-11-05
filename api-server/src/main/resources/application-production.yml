@@ -1,0 +1,38 @@
+spring:
+  flyway:
+    enabled: ${DB_MIGRATION_ENABLED:false}
+    baseline-on-migrate: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:true}
+      mail.smtp.starttls.required: ${SMTP_STARTTLS:true}
+      mail.smtp.ssl.enable: ${SMTP_SSL:false}
+      mail.smtp.ssl.checkserveridentity: true
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+app:
+  auth:
+    allowed-origins: ${APP_ALLOWED_ORIGINS:}
+    secure-cookie: true
+server:
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      remote-ip-header: X-Forwarded-For
+      protocol-header: X-Forwarded-Proto
+      internal-proxies: '172\.30\.88\.10'
+  error:
+    include-message: never
+    include-stacktrace: never

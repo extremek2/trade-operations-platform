@@ -1,0 +1,195 @@
+package com.tradeoperationsplatform.apiserver.domain.tradecycle;
+
+import com.tradeoperationsplatform.apiserver.domain.costing.entity.CostScenario;
+import com.tradeoperationsplatform.apiserver.domain.identity.entity.AppUser;
+import com.tradeoperationsplatform.apiserver.domain.identity.entity.Organization;
+import com.tradeoperationsplatform.apiserver.domain.partner.entity.BusinessPartner;
+import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+@Entity
+@Table(name = "purchase_order")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class PurchaseOrder {
+    public enum Status { DRAFT, APPROVED, PARTIALLY_SHIPPED, SHIPPED, PARTIALLY_RECEIVED, COMPLETED, CANCELLED }
+    public enum PaymentStatus { UNPAID, PARTIALLY_PAID, PAID }
+    public enum ProcurementRoute { IMPORT, DOMESTIC_STOCK }
+    public enum ExternalOrderStatus { NOT_PLACED, PLACED }
+    public enum CatalogRecheckStatus { NOT_REQUIRED, REQUIRED, PASSED, CHANGED, FAILED }
+
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Column(name = "public_id", nullable = false, unique = true, updatable = false) private UUID publicId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "organization_id") private Organization organization;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "supplier_id") private BusinessPartner supplier;
+    @Column(name = "order_number", nullable = false) private String orderNumber;
+    @Enumerated(EnumType.STRING) @Column(nullable = false) private Status status;
+    @Enumerated(EnumType.STRING) @Column(name = "procurement_route", nullable = false) private ProcurementRoute procurementRoute;
+    @Enumerated(EnumType.STRING) @Column(name = "external_order_status", nullable = false) private ExternalOrderStatus externalOrderStatus;
+    @Column(name = "external_order_reference", length = 200) private String externalOrderReference;
+    @Column(name = "external_order_total", precision = 19, scale = 4) private BigDecimal externalOrderTotal;
+    @Column(name = "external_ordered_at") private LocalDate externalOrderedAt;
+    @Enumerated(EnumType.STRING) @Column(name = "catalog_recheck_status", nullable = false)
+    private CatalogRecheckStatus catalogRecheckStatus;
+    @Column(name = "catalog_rechecked_at") private LocalDateTime catalogRecheckedAt;
+    @Column(name = "catalog_recheck_message", length = 2000) private String catalogRecheckMessage;
+    @Enumerated(EnumType.STRING) @Column(name = "payment_status", nullable = false) private PaymentStatus paymentStatus;
+    @Column(name = "paid_amount", nullable = false, precision = 19, scale = 4) private BigDecimal paidAmount;
+    @Column(name = "paid_at") private LocalDate paidAt;
+    @Column(name = "payment_evidence") private String paymentEvidence;
+    @Column(nullable = false, length = 3) private String currency;
+    @Column(name = "supplier_name_snapshot", nullable = false) private String supplierNameSnapshot;
+    @Column(name = "quote_number_snapshot") private String quoteNumberSnapshot;
+    @Column(name = "quote_revision_snapshot", nullable = false) private int quoteRevisionSnapshot;
+    @Column(name = "expected_total_cost_krw", nullable = false, precision = 19, scale = 2) private BigDecimal expectedTotalCostKrw;
+    @Column(name = "ordered_at", nullable = false) private LocalDate orderedAt;
+    @Column(name = "approved_at") private LocalDateTime approvedAt;
+    @Column(name = "cancelled_at") private LocalDateTime cancelledAt;
+    private String notes;
+    @Version private long version;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "created_by") private AppUser createdBy;
+    @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
+    @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
+    @OneToMany(mappedBy = "purchaseOrder", cascade = CascadeType.ALL, orphanRemoval = false)
+    @OrderBy("lineNumber ASC") private List<PurchaseOrderLine> lines = new ArrayList<>();
+
+    public PurchaseOrder(Organization organization, AppUser creator, List<CostScenario> scenarios,
+                         String orderNumber, LocalDate orderedAt, String notes, ProcurementRoute procurementRoute) {
+        if (scenarios == null || scenarios.isEmpty()) throw new IllegalArgumentException("발주 품목은 한 개 이상이어야 합니다.");
+        CostScenario first = scenarios.get(0);
+        var productIds = new java.util.HashSet<Long>();
+        for (CostScenario scenario : scenarios) {
+            if (scenario.getTotalLandedCostKrw() == null || scenario.getQuotedUnitPrice() == null) {
+                throw new IllegalArgumentException("완성된 예상 원가 시나리오만 발주로 전환할 수 있습니다.");
+            }
+            if (!scenario.getOrganization().getId().equals(organization.getId())) {
+                throw new IllegalArgumentException("같은 조직의 원가 시나리오만 발주할 수 있습니다.");
+            }
+            if (!scenario.getQuote().getId().equals(first.getQuote().getId())) {
+                throw new IllegalArgumentException("같은 공급 견적의 품목만 하나의 발주로 묶을 수 있습니다.");
+            }
+            if (!productIds.add(scenario.getProduct().getId())) {
+                throw new IllegalArgumentException("한 발주에 같은 상품의 원가 시나리오를 중복 연결할 수 없습니다.");
+            }
+        }
+        this.publicId = UUID.randomUUID();
+        this.organization = organization;
+        this.createdBy = creator;
+        this.supplier = first.getQuote().getSupplier();
+        this.orderNumber = required(orderNumber, "발주번호");
+        this.status = Status.DRAFT;
+        this.procurementRoute = procurementRoute == null ? ProcurementRoute.IMPORT : procurementRoute;
+        if (this.procurementRoute == ProcurementRoute.DOMESTIC_STOCK && !"KRW".equals(first.getQuoteCurrency()))
+            throw new IllegalArgumentException("국내 재고 매입은 KRW 견적만 사용할 수 있습니다.");
+        this.externalOrderStatus = ExternalOrderStatus.NOT_PLACED;
+        this.catalogRecheckStatus = CatalogRecheckStatus.NOT_REQUIRED;
+        this.paymentStatus = PaymentStatus.UNPAID;
+        this.paidAmount = BigDecimal.ZERO;
+        this.currency = first.getQuoteCurrency();
+        this.supplierNameSnapshot = supplier.getName();
+        this.quoteNumberSnapshot = first.getQuote().getQuoteNumber();
+        this.quoteRevisionSnapshot = first.getQuoteRevisionNumber();
+        this.expectedTotalCostKrw = scenarios.stream().map(CostScenario::getTotalLandedCostKrw)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        this.orderedAt = orderedAt == null ? LocalDate.now() : orderedAt;
+        this.notes = trimToNull(notes);
+    }
+
+    public void addLine(PurchaseOrderLine line) { lines.add(line); }
+
+    public void requireCatalogRecheck() {
+        if (procurementRoute != ProcurementRoute.DOMESTIC_STOCK)
+            throw new IllegalStateException("국내 재고 매입만 도매 상품을 재확인할 수 있습니다.");
+        catalogRecheckStatus = CatalogRecheckStatus.REQUIRED;
+    }
+
+    public void recordCatalogRecheck(CatalogRecheckStatus result, String message) {
+        if (catalogRecheckStatus == CatalogRecheckStatus.NOT_REQUIRED)
+            throw new IllegalStateException("재확인 대상인 도매 상품이 없습니다.");
+        if (externalOrderStatus == ExternalOrderStatus.PLACED)
+            throw new IllegalStateException("외부 주문 기록 후에는 가격·재고를 재확인할 수 없습니다.");
+        if (result != CatalogRecheckStatus.PASSED && result != CatalogRecheckStatus.CHANGED
+                && result != CatalogRecheckStatus.FAILED)
+            throw new IllegalArgumentException("재확인 결과가 올바르지 않습니다.");
+        catalogRecheckStatus = result;
+        catalogRecheckedAt = LocalDateTime.now();
+        catalogRecheckMessage = trimToNull(message);
+        if (result != CatalogRecheckStatus.PASSED && status == Status.APPROVED) {
+            status = Status.DRAFT;
+            approvedAt = null;
+        }
+    }
+
+    public void approve() {
+        if (status != Status.DRAFT) throw new IllegalStateException("초안 발주만 승인할 수 있습니다.");
+        if (catalogRecheckStatus != CatalogRecheckStatus.NOT_REQUIRED
+                && catalogRecheckStatus != CatalogRecheckStatus.PASSED)
+            throw new IllegalStateException("도매 상품의 가격·재고 재확인을 통과해야 발주를 승인할 수 있습니다.");
+        status = Status.APPROVED;
+        approvedAt = LocalDateTime.now();
+    }
+
+    public void recordExternalOrder(String reference, BigDecimal total, LocalDate date) {
+        if (status != Status.APPROVED || externalOrderStatus != ExternalOrderStatus.NOT_PLACED)
+            throw new IllegalStateException("승인 후 아직 외부 주문 기록이 없는 발주만 등록할 수 있습니다.");
+        if (reference == null || reference.isBlank() || reference.trim().length() > 200)
+            throw new IllegalArgumentException("외부 주문번호는 1~200자로 입력해 주세요.");
+        if (total == null || total.signum() < 0) throw new IllegalArgumentException("외부 주문금액이 올바르지 않습니다.");
+        if (date == null) throw new IllegalArgumentException("외부 주문일이 필요합니다.");
+        if (catalogRecheckStatus != CatalogRecheckStatus.NOT_REQUIRED
+                && (catalogRecheckStatus != CatalogRecheckStatus.PASSED || catalogRecheckedAt == null
+                || catalogRecheckedAt.isBefore(LocalDateTime.now().minusMinutes(30))))
+            throw new IllegalStateException("외부 주문 직전 30분 이내의 가격·재고 재확인이 필요합니다.");
+        this.externalOrderReference = reference.trim();
+        this.externalOrderTotal = total;
+        this.externalOrderedAt = date;
+        this.externalOrderStatus = ExternalOrderStatus.PLACED;
+    }
+
+    public void cancel() {
+        if (externalOrderStatus == ExternalOrderStatus.PLACED)
+            throw new IllegalStateException("외부 주문이 기록된 발주는 원 사이트 주문 확인 없이 취소할 수 없습니다.");
+        if (status != Status.DRAFT && status != Status.APPROVED) {
+            throw new IllegalStateException("선적이 시작된 발주는 취소할 수 없습니다.");
+        }
+        status = Status.CANCELLED;
+        cancelledAt = LocalDateTime.now();
+    }
+
+    public void recordPayment(PaymentStatus target, BigDecimal amount, LocalDate date, String evidence) {
+        if (status == Status.CANCELLED) throw new IllegalStateException("취소된 발주에는 결제를 기록할 수 없습니다.");
+        if (target == null || amount == null || amount.signum() < 0) throw new IllegalArgumentException("결제 상태와 금액을 확인해 주세요.");
+        if (target == PaymentStatus.UNPAID && amount.signum() != 0) throw new IllegalArgumentException("미결제 금액은 0이어야 합니다.");
+        if (target != PaymentStatus.UNPAID && (amount.signum() == 0 || date == null)) throw new IllegalArgumentException("결제 금액과 결제일은 필수입니다.");
+        paymentStatus = target;
+        paidAmount = amount;
+        paidAt = target == PaymentStatus.UNPAID ? null : date;
+        paymentEvidence = trimToNull(evidence);
+    }
+
+    public void updateProgress(BigDecimal shipped, BigDecimal received, BigDecimal ordered) {
+        if (status == Status.CANCELLED || status == Status.DRAFT) return;
+        if (received.compareTo(ordered) >= 0) status = Status.COMPLETED;
+        else if (procurementRoute == ProcurementRoute.DOMESTIC_STOCK && received.signum() > 0) status = Status.PARTIALLY_RECEIVED;
+        else if (shipped.compareTo(ordered) >= 0) status = Status.SHIPPED;
+        else if (shipped.signum() > 0) status = Status.PARTIALLY_SHIPPED;
+        else status = Status.APPROVED;
+    }
+
+    private static String required(String value, String label) {
+        if (value == null || value.isBlank()) throw new IllegalArgumentException(label + "은 필수입니다.");
+        return value.trim();
+    }
+    private static String trimToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+    @PrePersist void create() { createdAt = updatedAt = LocalDateTime.now(); }
+    @PreUpdate void touch() { updatedAt = LocalDateTime.now(); }
+}

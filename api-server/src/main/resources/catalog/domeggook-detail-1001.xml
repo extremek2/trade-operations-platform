@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<domeggook><basis><no>1001</no><title>테스트 문구 세트</title></basis><price><dome>3200</dome></price><qty><inventory>120</inventory><domeMoq>10</domeMoq></qty><seller><id>sample_stationery</id></seller><deli><fromOversea>false</fromOversea><dome><fee>3000</fee></dome></deli><channel><dome>true</dome></channel></domeggook>

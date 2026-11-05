@@ -1,0 +1,118 @@
+# Independent production stack. Do not merge with the development compose file.
+name: trade-ops
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?required}
+      POSTGRES_USER: ${POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      APP_DB_USER: ${APP_DB_USER:?required}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?required}
+    volumes:
+      - production_postgres:/var/lib/postgresql/data
+    networks: [private]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  api-server:
+    image: trade-ops-api:${RELEASE_TAG:?required}
+    build:
+      context: ../api-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: &runtime_environment
+      SPRING_PROFILES_ACTIVE: production
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?required}
+      SPRING_DATASOURCE_USERNAME: ${APP_DB_USER:?required}
+      SPRING_DATASOURCE_PASSWORD: ${APP_DB_PASSWORD:?required}
+      JWT_SECRET: ${JWT_SECRET:?required}
+      MAIL_OUTBOX_KEY: ${MAIL_OUTBOX_KEY:?required}
+      APP_ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:?required}
+      MAIL_VERIFICATION_URL: ${PUBLIC_ORIGIN:?required}/verify-email
+      MAIL_CASE_ACCESS_URL: ${PUBLIC_ORIGIN:?required}/external-access
+      MAIL_DISPATCH_ENABLED: ${MAIL_DISPATCH_ENABLED:-false}
+      MAIL_FROM: ${MAIL_FROM:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_SSL: ${SMTP_SSL:-false}
+      DOMEGGOOK_API_KEY: ${DOMEGGOOK_API_KEY:-}
+      OBJECT_STORAGE_ENABLED: ${OBJECT_STORAGE_ENABLED:-false}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://minio:9000}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-trade-ops-artifacts}
+      OBJECT_STORAGE_PATH_STYLE: ${OBJECT_STORAGE_PATH_STYLE:-true}
+      OBJECT_STORAGE_CREATE_BUCKET: ${OBJECT_STORAGE_CREATE_BUCKET:-false}
+      OCR_ENABLED: ${OCR_ENABLED:-false}
+      OCR_BASE_URL: ${OCR_BASE_URL:-http://ocr-worker:8090}
+      OCR_CONNECT_TIMEOUT_SECONDS: ${OCR_CONNECT_TIMEOUT_SECONDS:-3}
+      OCR_REQUEST_TIMEOUT_SECONDS: ${OCR_REQUEST_TIMEOUT_SECONDS:-180}
+    networks: [private]
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, 'http://localhost:8080/actuator/health/readiness']
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+  migrate:
+    image: trade-ops-api:${RELEASE_TAG:?required}
+    profiles: [maintenance]
+    command: [--migrate-only]
+    environment:
+      <<: *runtime_environment
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?required}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      MAIL_DISPATCH_ENABLED: 'false'
+    networks: [private]
+  frontend:
+    image: trade-ops-web:${RELEASE_TAG:?required}
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.production
+    restart: unless-stopped
+    depends_on:
+      api-server:
+        condition: service_healthy
+    ports:
+      - '${HTTPS_BIND_ADDRESS:-0.0.0.0}:443:443'
+    volumes:
+      - ${TLS_CERT_FILE:?required}:/run/tls/fullchain.pem:ro
+      - ${TLS_KEY_FILE:?required}:/run/tls/privkey.pem:ro
+    networks:
+      private:
+        ipv4_address: 172.30.88.10
+  minio:
+    profiles: [documents]
+    build:
+      context: ./minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY:-}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_KEY:-}
+    volumes:
+      - production_minio:/data
+    networks: [private]
+  ocr-worker:
+    profiles: [documents]
+    build:
+      context: ../ocr-worker
+    restart: unless-stopped
+    networks: [private]
+networks:
+  private:
+    ipam:
+      config:
+        - subnet: 172.30.88.0/24
+volumes:
+  production_postgres:
+  production_minio:

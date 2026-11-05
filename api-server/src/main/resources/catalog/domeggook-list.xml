@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<domeggook><header><numberOfItems>3</numberOfItems></header><list>
+  <item><no>1001</no><title>테스트 문구 세트</title><id>sample_stationery</id><price>3200</price><unitQty>10</unitQty><comOnly>true</comOnly><deli><fee>3000</fee><fromOversea>false</fromOversea></deli><url>https://www.domeggook.com/main/item/itemView.php?itemNo=1001</url></item>
+  <item><no>1002</no><title>테스트 생활용품 박스</title><id>sample_household</id><price>4500</price><unitQty>5</unitQty><comOnly>true</comOnly><deli><fee>4000</fee><fromOversea>false</fromOversea></deli><url>https://www.domeggook.com/main/item/itemView.php?itemNo=1002</url></item>
+  <item><no>1003</no><title>테스트 해외직배송 소품</title><id>sample_overseas</id><price>7000</price><unitQty>1</unitQty><comOnly>false</comOnly><deli><fee>5000</fee><fromOversea>true</fromOversea></deli><url>https://www.domeggook.com/main/item/itemView.php?itemNo=1003</url></item>
+</list></domeggook>

@@ -32,6 +32,11 @@ venv.bak/
 .env
 .env.test
 .env.local
+.env.production
+/ops/backups/
+/ops/tls/
+/outputs/
+/tmp/
 .flaskenv
 
 ### VS Code / IDE ###
@@ -55,4 +60,5 @@ nm-config.json
 Thumbs.db
 
 
-celerybeat-schedule
+celerybeat-schedulecelerybeat-schedule
+celerybeat.pid

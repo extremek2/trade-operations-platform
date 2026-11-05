@@ -1,0 +1,84 @@
+spring:
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 16MB
+  mail:
+    properties:
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/product_db}
+    username: ${SPRING_DATASOURCE_USERNAME:product_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:product_pass}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  security:
+    enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /api-docs
+
+server:
+  port: 8080
+
+app:
+  wholesale:
+    domeggook-api-key: ${DOMEGGOOK_API_KEY:}
+  object-storage:
+    enabled: ${OBJECT_STORAGE_ENABLED:false}
+    endpoint: ${OBJECT_STORAGE_ENDPOINT:http://localhost:9000}
+    region: ${OBJECT_STORAGE_REGION:us-east-1}
+    access-key: ${OBJECT_STORAGE_ACCESS_KEY:}
+    secret-key: ${OBJECT_STORAGE_SECRET_KEY:}
+    bucket: ${OBJECT_STORAGE_BUCKET:trade-ops-documents}
+    path-style: ${OBJECT_STORAGE_PATH_STYLE:true}
+    create-bucket: ${OBJECT_STORAGE_CREATE_BUCKET:false}
+  ocr:
+    enabled: ${OCR_ENABLED:false}
+    base-url: ${OCR_BASE_URL:http://localhost:8090}
+    connect-timeout-seconds: ${OCR_CONNECT_TIMEOUT_SECONDS:3}
+    request-timeout-seconds: ${OCR_REQUEST_TIMEOUT_SECONDS:180}
+  mail:
+    dispatch-enabled: ${MAIL_DISPATCH_ENABLED:false}
+    outbox-key: ${MAIL_OUTBOX_KEY:}
+    from: ${MAIL_FROM:}
+    verification-url: ${MAIL_VERIFICATION_URL:http://localhost:3000/verify-email}
+    case-access-url: ${MAIL_CASE_ACCESS_URL:http://localhost:3000/external-access}
+  collaboration:
+    invitation-days: ${CASE_INVITATION_DAYS:7}
+    login-minutes: ${CASE_LOGIN_MINUTES:15}
+  auth:
+    allowed-origins: ${APP_ALLOWED_ORIGINS:http://localhost:3000}
+    jwt-secret: ${JWT_SECRET:local-development-secret-change-me-1234567890}
+    access-token-minutes: ${ACCESS_TOKEN_MINUTES:15}
+    refresh-token-days: ${REFRESH_TOKEN_DAYS:14}
+    secure-cookie: ${AUTH_SECURE_COOKIE:false}
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health
