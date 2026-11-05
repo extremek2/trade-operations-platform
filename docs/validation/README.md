@@ -1,10 +1,10 @@
 # V0 실데이터 검증
 
 - 시작일: 2026-11-06
-- 작업 브랜치: `feature/v0-real-data-validation`
-- 기준선: `847b27b` (`docs: hand off end-to-end trade cycle baseline`)
-- 현재 단계: V0V-0 `main` PR 대기와 V0V-1 파일럿 3건 선정
-- 최신 인계: [종단 거래 사이클 기준선 인계](../engineering/end-to-end-trade-cycle-handoff.md)
+- 기준 브랜치: `main`
+- 기준선: `bdf5693` (`Merge pull request #2 from extremek2/feature/v0-real-data-validation`)
+- 현재 단계: V0V-1 파일럿 3건 선정
+- 최신 인계: [V0 기술 기준선 병합 인계](../engineering/v0-baseline-merge-handoff.md)
 
 ## 목표
 
@@ -19,7 +19,7 @@
 
 | 단계 | 상태 | 완료 기준 |
 |---|---|---|
-| V0V-0 기준선 보호 | CI 완료, PR 대기 | 종료 브랜치 원격 반영, `main` PR, CI 전체 통과 |
+| V0V-0 기준선 보호 | 완료 | 기술 MVP·검증 기반 `main` 병합, CI 전체 통과, 병합 브랜치 정리 |
 | V0V-1 파일럿 입력 계약 | 준비됨 | 3개 상품과 증거 사용·보관 권한, 측정 기준 확정 |
 | V0V-2 실제 사이클 완주 | 대기 | 해외 1건 포함 3개 상품의 원가·판매 관측·결정 기록 |
 | V0V-3 필요한 연동 실증 | 대기 | 실제로 사용한 라이브/API/문서 실패의 회귀 fixture |
@@ -68,8 +68,6 @@
 ## 현재 차단 조건
 
 - 아직 파일럿 대상 상품과 실제 원본 자료가 저장소에 제공되지 않았다.
-- GitHub CLI 인증이 만료되어 자동 PR 생성은 할 수 없다. 종료 브랜치는 원격에 반영됐으며 PR은
-  GitHub에서 `feature/end-to-end-trade-cycle` → `main`으로 생성해야 한다.
 - 도매꾹 라이브 테스트와 MinIO 왕복 테스트에 필요한 환경변수는 설정되지 않았다.
 
 ## 진행 기록
@@ -78,6 +76,7 @@
 |---|---|---|---|---|
 | 2026-11-06 | `847b27b` | 기술 MVP 인계, 원격 기준선 반영, 검증 브랜치 분리 | 인계문서의 전체 검증 결과 참조 | CI 최초 실행과 파일럿 3건 선정 |
 | 2026-11-06 | `25cd737` | 품질 CI와 파일럿 측정 계약·케이스 템플릿 추가 | [Actions 42090726754](https://github.com/extremek2/trade-operations-platform/actions/runs/42090726754): backend, frontend, compose, OCR, browser E2E 모두 성공 | 종료 브랜치의 `main` PR과 파일럿 3건 선정 |
+| 2026-11-06 | `bdf5693` | PR #1·#2 `main` 병합과 병합 완료 브랜치 정리 | [Actions 42093557380](https://github.com/extremek2/trade-operations-platform/actions/runs/42093557380): 전체 성공 | 실제 또는 실행 가능한 파일럿 3건 선정 |
 
 ## 단계 종료 시 인계
 
