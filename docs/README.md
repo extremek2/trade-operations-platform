@@ -5,7 +5,7 @@
 
 ## 읽는 순서
 
-1. [최신 종단 거래 사이클 인계](engineering/end-to-end-trade-cycle-handoff.md)에서 현재 기준점과 다음 실행 단계를 확인한다.
+1. [최신 V0 기술 기준선 병합 인계](engineering/v0-baseline-merge-handoff.md)에서 현재 `main` 기준점과 다음 실행 단계를 확인한다.
 2. [통합 로드맵 v2](product/import-domestic-platform-roadmap-v2.md)에서 전체 제품 범위와 개발 순서를 확인한다.
 3. [Import OS V0 PRD](product/prd.md)에서 이번 개발·검증 범위를 확인한다.
 4. [BM Stage 1](product/bm-stage-1-market-to-bm.md), [시장조사 Stage 1](product/market-stage-1.md), [지원사업 매칭 Stage 1](product/program-stage-1.md) 순서로 IR 전 근거와 게이트를 확인한다.
@@ -59,6 +59,9 @@
 | [코어 도메인 실행 계획](architecture/P0_EXECUTION_PLAN.md) | P0~P5 첫 수직 사이클 완료, P6 공급 문서 OCR 결과부터 검토 초안·다품목 거래 사이클까지 연결 |
 
 ## 구현·검증 기록
+
+[최신 V0 기술 기준선 병합 인계](engineering/v0-baseline-merge-handoff.md)는 2026-11-06 기준
+두 PR의 `main` 병합, 브랜치 정리 결과, V0V-0 완료와 V0V-1 입력 조건을 기록한다.
 
 [최신 종단 거래 사이클 인계](engineering/end-to-end-trade-cycle-handoff.md)는 2026-11-06 기준
 기술 MVP의 완료 범위, 최신 전체 검증, Git 기준선과 V0 실데이터 검증 순서를 기록한다.
